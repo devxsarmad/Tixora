@@ -1,0 +1,25 @@
+# Usage:
+# Starts the local PostgreSQL database for this project.
+# Run: docker compose up -d db
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: team-task-manager-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: team_task_manager
+    ports:
+      - '5433:5432'
+    volumes:
+      - team_task_manager_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d team_task_manager']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  team_task_manager_data:

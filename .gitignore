@@ -1,0 +1,16 @@
+# Usage:
+# Keeps local dependencies, generated builds, and private env files out of git.
+
+node_modules
+dist
+.env
+docs
+server/node_modules
+server/dist
+server/.env
+
+client/node_modules
+client/dist
+client/.env
+
+.DS_Store
