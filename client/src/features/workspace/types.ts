@@ -23,6 +23,25 @@ export type TeamDetail = TeamSummary & {
   members: TeamMember[];
 };
 
+export type InvitationSummary = {
+  id: string;
+  teamId: string;
+  email: string;
+  token: string;
+  status: 'pending' | 'accepted' | 'expired';
+  role: 'owner' | 'admin' | 'member';
+  inviter: {
+    id: string;
+    email: string;
+    displayName: string;
+  };
+  acceptedBy: string | null;
+  acceptedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProjectSummary = {
   id: string;
   teamId: string;
@@ -62,10 +81,12 @@ export type TaskSummary = {
   status: 'todo' | 'in_progress' | 'blocked' | 'done';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   dueAt: string | null;
+  commentCount: number;
   assignees: Array<{
     id: string;
     email: string;
     displayName: string;
+    hasProjectAccess?: boolean;
   }>;
 };
 

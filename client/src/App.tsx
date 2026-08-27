@@ -58,7 +58,7 @@ export function App() {
     <main className="auth-shell">
       <section className="auth-hero">
         <p className="eyebrow">Organization Operations</p>
-        <h1>Organization Task Manager</h1>
+        <h1>Tixora</h1>
         <p>
           Manage organizations, users, projects, tasks, ownership, and delivery
           in one focused app.

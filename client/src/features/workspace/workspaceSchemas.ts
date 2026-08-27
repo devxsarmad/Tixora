@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 export const teamFormSchema = z.object({
-  name: z.string().trim().min(1, 'Team name is required.').max(100)
+  name: z.string().trim().min(1, 'Organization name is required.').max(100)
 });
 
 export const projectFormSchema = z.object({

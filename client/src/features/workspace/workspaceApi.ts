@@ -5,6 +5,7 @@
 import { apiRequest, authHeaders } from '../../api/http.js';
 import type {
   CommentSummary,
+  InvitationSummary,
   ProjectDetail,
   ProjectMember,
   ProjectSummary,
@@ -84,6 +85,30 @@ export function removeTeamMember(token: string, teamSlug: string, userId: string
     {
       method: 'DELETE',
       headers: authHeaders(token)
+    }
+  );
+}
+
+export function listInvitations(token: string, teamSlug: string) {
+  return apiRequest<{ invitations: InvitationSummary[] }>(
+    `/api/teams/${teamSlug}/invitations`,
+    {
+      headers: authHeaders(token)
+    }
+  );
+}
+
+export function createInvitation(
+  token: string,
+  teamSlug: string,
+  input: { email: string; role: 'admin' | 'member' }
+) {
+  return apiRequest<{ invitation: InvitationSummary }>(
+    `/api/teams/${teamSlug}/invitations`,
+    {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify(input)
     }
   );
 }

@@ -1,6 +1,6 @@
 -- Usage:
 -- Run this migration once against a PostgreSQL database to create the initial
--- Team Task Manager schema. It defines tables, relationships, constraints,
+-- Tixora schema. It defines tables, relationships, constraints,
 -- indexes, enums, and update timestamp triggers. This is raw SQL on purpose:
 -- the project is meant to teach what ORMs usually hide.
 

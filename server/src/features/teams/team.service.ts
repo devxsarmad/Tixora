@@ -43,7 +43,7 @@ export async function createTeam(input: CreateTeamInput, ownerId: string) {
   if (!slug) {
     throw new HttpError(
       400,
-      'Team name must contain at least one letter or number',
+      'Organization name must contain at least one letter or number',
       'INVALID_TEAM_NAME'
     );
   }
@@ -64,7 +64,7 @@ export async function createTeam(input: CreateTeamInput, ownerId: string) {
         });
       }
 
-      throw new HttpError(409, 'Team slug is already taken', 'TEAM_SLUG_TAKEN');
+      throw new HttpError(409, 'Organization slug is already taken', 'TEAM_SLUG_TAKEN');
     }
 
     throw error;
@@ -79,7 +79,7 @@ export async function getMyTeamBySlug(slug: string, userId: string) {
   const team = await findTeamDetailForUser({ slug, userId });
 
   if (!team) {
-    throw new HttpError(404, 'Team not found', 'TEAM_NOT_FOUND');
+    throw new HttpError(404, 'Organization not found', 'TEAM_NOT_FOUND');
   }
 
   return team;
@@ -89,7 +89,7 @@ function handleMemberResult<T>(
   result: T | null | 'forbidden' | 'user_not_found'
 ): T {
   if (result === 'forbidden') {
-    throw new HttpError(403, 'Team permission denied', 'TEAM_FORBIDDEN');
+    throw new HttpError(403, 'Organization permission denied', 'TEAM_FORBIDDEN');
   }
 
   if (result === 'user_not_found') {
@@ -97,7 +97,7 @@ function handleMemberResult<T>(
   }
 
   if (!result) {
-    throw new HttpError(404, 'Team member not found', 'TEAM_MEMBER_NOT_FOUND');
+    throw new HttpError(404, 'Organization member not found', 'TEAM_MEMBER_NOT_FOUND');
   }
 
   return result;

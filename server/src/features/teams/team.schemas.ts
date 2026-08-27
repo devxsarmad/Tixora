@@ -17,12 +17,12 @@ const slugSchema = z
 export const createTeamSchema = z.object({
   name: z
     .string({
-      required_error: 'Workspace name is required',
-      invalid_type_error: 'Workspace name must be text'
+      required_error: 'Organization name is required',
+      invalid_type_error: 'Organization name must be text'
     })
     .trim()
-    .min(1, 'Workspace name is required')
-    .max(100, 'Workspace name must be 100 characters or less'),
+    .min(1, 'Organization name is required')
+    .max(100, 'Organization name must be 100 characters or less'),
   slug: z.preprocess(
     (value) => (value === '' ? undefined : value),
     slugSchema.optional()

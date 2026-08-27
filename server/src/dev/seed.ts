@@ -49,7 +49,7 @@ await withTransaction(async (client) => {
   const teamResult = await client.query<{ id: string }>(
     `
       INSERT INTO teams (name, slug, created_by)
-      VALUES ('Team Task Manager Demo', 'team-task-manager-demo', $1)
+      VALUES ('Tixora Demo', 'tixora-demo', $1)
       ON CONFLICT (slug) DO UPDATE
       SET name = EXCLUDED.name
       RETURNING id
@@ -217,7 +217,7 @@ await withTransaction(async (client) => {
       member: 'member@teamtask.dev',
       password: 'Password123!'
     },
-    teamSlug: 'team-task-manager-demo',
+    teamSlug: 'tixora-demo',
     projectId,
     taskIds: [taskOneId, taskTwoId]
   });

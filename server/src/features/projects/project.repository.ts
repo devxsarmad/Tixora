@@ -231,7 +231,13 @@ export async function listProjectsForTeam(params: {
         ON pm.project_id = p.id
       LEFT JOIN tasks
         ON tasks.project_id = p.id
+       AND tasks.deleted_at IS NULL
       WHERE ($3::boolean = true OR p.archived_at IS NULL)
+        AND p.deleted_at IS NULL
+        AND (
+          accessible_team.team_role IN ('owner', 'admin')
+          OR requester_project.user_id IS NOT NULL
+        )
       GROUP BY
         p.id,
         p.team_id,
@@ -299,6 +305,11 @@ export async function findProjectDetailForUser(params: {
           ON requester_project.project_id = p.id
          AND requester_project.user_id = $2
         WHERE p.id = $1
+          AND p.deleted_at IS NULL
+          AND (
+            tm.role IN ('owner', 'admin')
+            OR requester_project.user_id IS NOT NULL
+          )
         LIMIT 1
       )
       SELECT
@@ -334,6 +345,7 @@ export async function findProjectDetailForUser(params: {
         ON u.id = pm.user_id
       LEFT JOIN tasks
         ON tasks.project_id = selected_project.id
+       AND tasks.deleted_at IS NULL
       GROUP BY
         selected_project.id,
         selected_project.team_id,
@@ -380,6 +392,7 @@ async function findProjectAccessForUser(
         ON pm.project_id = p.id
        AND pm.user_id = $2
       WHERE p.id = $1
+        AND p.deleted_at IS NULL
       LIMIT 1
     `,
     [params.projectId, params.userId]
@@ -525,6 +538,7 @@ export async function updateProjectForUser(params: {
             SELECT COUNT(*)::int
             FROM tasks
             WHERE tasks.project_id = p.id
+              AND tasks.deleted_at IS NULL
           ) AS task_count,
           p.archived_at,
           p.created_at,
@@ -562,7 +576,7 @@ export async function archiveProjectForUser(params: {
     const result = await client.query<ProjectRow>(
       `
         UPDATE projects AS p
-        SET archived_at = COALESCE(p.archived_at, now())
+        SET deleted_at = COALESCE(p.deleted_at, now())
         FROM teams AS t
         WHERE p.id = $1
           AND t.id = p.team_id

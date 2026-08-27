@@ -9,6 +9,7 @@ import { env } from './config/env.js';
 import { query } from './db/pool.js';
 import { authRouter } from './features/auth/auth.routes.js';
 import { commentRouter } from './features/comments/comment.routes.js';
+import { invitationRouter } from './features/invitations/invitation.routes.js';
 import { projectRouter } from './features/projects/project.routes.js';
 import { taskRouter } from './features/tasks/task.routes.js';
 import { teamRouter } from './features/teams/team.routes.js';
@@ -47,6 +48,7 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api', commentRouter);
+  app.use('/api', invitationRouter);
   app.use('/api', projectRouter);
   app.use('/api', taskRouter);
   app.use('/api/users', userRouter);

@@ -10,6 +10,9 @@ import React, {
   useState
 } from 'react';
 import { useForm } from 'react-hook-form';
+import { OrgSwitcher } from '../../components/layout/OrgSwitcher.js';
+import { InviteRow } from '../../components/members/InviteRow.js';
+import { UserSearchInput } from '../../components/members/UserSearchInput.js';
 import type { AuthResponse } from '../auth/types.js';
 import type {
   CommentFormValues,
@@ -29,6 +32,7 @@ import {
   addTeamMember,
   archiveProject,
   createComment,
+  createInvitation,
   createProject,
   createTask,
   createTeam,
@@ -36,6 +40,7 @@ import {
   getProject,
   getTeam,
   listComments,
+  listInvitations,
   listProjects,
   listTasks,
   listTeams,
@@ -51,6 +56,7 @@ import {
 } from './workspaceApi.js';
 import type {
   CommentSummary,
+  InvitationSummary,
   ProjectDetail,
   ProjectMember,
   ProjectSummary,
@@ -94,6 +100,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentSummary[]>([]);
+  const [invitations, setInvitations] = useState<InvitationSummary[]>([]);
   const [statusFilter, setStatusFilter] = useState<TaskSummary['status'] | 'all'>(
     'all'
   );
@@ -112,6 +119,12 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const [isTaskDetailsOpen, setIsTaskDetailsOpen] = useState(false);
   const [isProjectToolsOpen, setIsProjectToolsOpen] = useState(false);
   const [isTeamMembersOpen, setIsTeamMembersOpen] = useState(false);
+  const [isOrgSwitcherOpen, setIsOrgSwitcherOpen] = useState(false);
+  const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
+  const [projectSettingsTab, setProjectSettingsTab] = useState<'general' | 'members'>('general');
+  const [isProjectMemberHintDismissed, setIsProjectMemberHintDismissed] = useState(
+    () => localStorage.getItem('tixora.projectMemberHintDismissed') === 'true'
+  );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(entryPoint !== 'register');
   const [isWorkspaceMembersStepComplete, setIsWorkspaceMembersStepComplete] =
@@ -131,7 +144,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const [teamMemberRole, setTeamMemberRole] = useState<'admin' | 'member'>(
     'member'
   );
-  const [projectMemberUserId, setProjectMemberUserId] = useState('');
+  const [selectedProjectMemberUserIds, setSelectedProjectMemberUserIds] = useState<string[]>([]);
   const [projectMemberRole, setProjectMemberRole] =
     useState<ProjectMember['role']>('contributor');
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -183,6 +196,10 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     () => tasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectedTaskId, tasks]
   );
+  const selectedTaskNumber = useMemo(() => {
+    const taskIndex = tasks.findIndex((task) => task.id === selectedTaskId);
+    return taskIndex >= 0 ? taskIndex + 1 : null;
+  }, [selectedTaskId, tasks]);
   const workspaceMembers = useMemo(
     () => uniqueById(teamDetail?.members ?? []),
     [teamDetail?.members]
@@ -222,17 +239,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       `${member.displayName} ${member.email}`.toLowerCase().includes(query)
     );
   }, [projectMembers, taskAssigneeSearch]);
-  const setupStep = !selectedTeamSlug
-    ? 1
-    : !isWorkspaceMembersStepComplete
-      ? 2
-      : !selectedProject
-        ? 3
-        : !isProjectAccessStepComplete
-          ? 4
-          : 5;
-  const shouldShowSetupFlow = entryPoint === 'register' && !isSetupComplete;
-
   const availableDirectoryUsers = useMemo(() => {
     const organizationUserIds = new Set(
       workspaceMembers.map((member) => member.id)
@@ -242,6 +248,19 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       (user) => !organizationUserIds.has(user.id)
     );
   }, [userDirectoryResults, workspaceMembers]);
+  const invitedInvitations = useMemo(
+    () => invitations.filter((invitation) => invitation.status === 'pending'),
+    [invitations]
+  );
+  const inviteCandidateEmail = userDirectorySearch.trim().toLowerCase();
+  const canInviteTypedEmail =
+    isValidEmail(inviteCandidateEmail) &&
+    availableDirectoryUsers.length === 0 &&
+    !workspaceMembers.some((member) => member.email.toLowerCase() === inviteCandidateEmail) &&
+    !invitedInvitations.some((invitation) => invitation.email.toLowerCase() === inviteCandidateEmail);
+  const setupStep = !selectedTeamSlug ? 1 : 2;
+  const shouldShowSetupFlow =
+    entryPoint === 'register' && !isSetupComplete && !selectedProject;
   const visibleTasks = useMemo(() => {
     const query = taskSearch.trim().toLowerCase();
     if (!query) return tasks;
@@ -320,6 +339,10 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     return date.toISOString().slice(0, 16);
   }
 
+  function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
   function getInitials(name: string) {
     return name
       .split(' ')
@@ -353,23 +376,38 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   useEffect(() => {
     if (!selectedTeamSlug) {
       setTeamDetail(null);
+      setInvitations([]);
       setProjects([]);
       setSelectedProjectId(null);
       return;
     }
 
-    void Promise.all([
-      getTeam(session.accessToken, selectedTeamSlug),
-      listProjects(session.accessToken, selectedTeamSlug, {
-        includeArchived: includeArchivedProjects
-      })
-    ])
-      .then(([teamResponse, projectResponse]) => {
-        setTeamDetail(teamResponse.team);
-        setProjects(projectResponse.projects);
-        setSelectedProjectId(projectResponse.projects[0]?.id ?? null);
-      })
-      .catch((loadError) => showError('Load failed', loadError));
+    const teamSlug = selectedTeamSlug;
+
+    async function loadSelectedTeam() {
+      const [teamResponse, projectResponse] = await Promise.all([
+        getTeam(session.accessToken, teamSlug),
+        listProjects(session.accessToken, teamSlug, {
+          includeArchived: includeArchivedProjects
+        })
+      ]);
+
+      setTeamDetail(teamResponse.team);
+      setProjects(projectResponse.projects);
+      setSelectedProjectId(projectResponse.projects[0]?.id ?? null);
+
+      if (teamResponse.team.role === 'owner' || teamResponse.team.role === 'admin') {
+        const invitationResponse = await listInvitations(
+          session.accessToken,
+          teamSlug
+        ).catch(() => ({ invitations: [] }));
+        setInvitations(invitationResponse.invitations);
+      } else {
+        setInvitations([]);
+      }
+    }
+
+    void loadSelectedTeam().catch((loadError) => showError('Load failed', loadError));
   }, [includeArchivedProjects, selectedTeamSlug, session.accessToken]);
 
   useEffect(() => {
@@ -383,7 +421,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     void getProject(session.accessToken, selectedProjectId)
       .then((response) => {
         setProjectDetail(response.project);
-        setProjectMemberUserId('');
+        setSelectedProjectMemberUserIds([]);
       })
       .catch((loadError) => showError('Project load failed', loadError));
 
@@ -441,6 +479,34 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   }, [selectedTaskId, session.accessToken]);
 
   useEffect(() => {
+    if (!isTaskDetailsOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        closeTaskDetails();
+        return;
+      }
+
+      if (!selectedTaskId || tasks.length === 0) return;
+      const currentIndex = tasks.findIndex((task) => task.id === selectedTaskId);
+      if (currentIndex < 0) return;
+
+      if (event.key === 'j' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSelectedTaskId(tasks[Math.min(currentIndex + 1, tasks.length - 1)].id);
+      }
+
+      if (event.key === 'k' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSelectedTaskId(tasks[Math.max(currentIndex - 1, 0)].id);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isTaskDetailsOpen, selectedTaskId, tasks]);
+
+  useEffect(() => {
     const query = userDirectorySearch.trim();
 
     if (!query) {
@@ -466,7 +532,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     const name = workspaceName.trim();
 
     if (!name) {
-      setError('Workspace name is required.');
+      setError('Organization name is required.');
       return;
     }
 
@@ -501,6 +567,9 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setSelectedTaskId(null);
       projectForm.reset();
       setIsProjectFormOpen(false);
+      if (entryPoint === 'register') {
+        setIsSetupComplete(true);
+      }
     } catch (createError) {
       showError('Project creation failed', createError);
     }
@@ -513,35 +582,46 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     const selectedEmails = selectedDirectoryUserIds
       .map((userId) => userDirectoryResults.find((user) => user.id === userId)?.email)
       .filter((email): email is string => Boolean(email));
-    const fallbackEmail = teamMemberEmail.trim();
-    const emails = selectedEmails.length > 0 ? selectedEmails : fallbackEmail ? [fallbackEmail] : [];
+    const fallbackEmail = teamMemberEmail.trim().toLowerCase();
+    const inviteEmail = canInviteTypedEmail ? inviteCandidateEmail : fallbackEmail;
 
-    if (emails.length === 0) {
-      setError('Select at least one registered user to add.');
+    if (selectedEmails.length === 0 && !inviteEmail) {
+      setError('Select registered members or enter an email to invite.');
       return;
     }
 
     try {
       setError(null);
-      const responses = await Promise.all(
-        emails.map((email) =>
-          addTeamMember(session.accessToken, selectedTeamSlug, {
-            email,
-            role: teamMemberRole
-          })
-        )
-      );
-      setTeamDetail((current) =>
-        current
-          ? {
-              ...current,
-              members: uniqueById([
-                ...responses.map((response) => response.member),
-                ...current.members
-              ])
-            }
-          : current
-      );
+      if (selectedEmails.length > 0) {
+        const responses = await Promise.all(
+          selectedEmails.map((email) =>
+            addTeamMember(session.accessToken, selectedTeamSlug, {
+              email,
+              role: teamMemberRole
+            })
+          )
+        );
+        setTeamDetail((current) =>
+          current
+            ? {
+                ...current,
+                members: uniqueById([
+                  ...responses.map((response) => response.member),
+                  ...current.members
+                ])
+              }
+            : current
+        );
+      } else {
+        const response = await createInvitation(session.accessToken, selectedTeamSlug, {
+          email: inviteEmail,
+          role: teamMemberRole
+        });
+        setInvitations((current) => [
+          response.invitation,
+          ...current.filter((invitation) => invitation.id !== response.invitation.id)
+        ]);
+      }
       setTeamMemberEmail('');
       setUserDirectorySearch('');
       setUserDirectoryResults([]);
@@ -602,33 +682,35 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
 
   async function handleAddProjectMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedProjectId || !projectMemberUserId) return;
+    if (!selectedProjectId || selectedProjectMemberUserIds.length === 0) {
+      setError('Select at least one organization user to add to the project.');
+      return;
+    }
 
     try {
       setError(null);
-      const response = await upsertProjectMember(
-        session.accessToken,
-        selectedProjectId,
-        {
-          userId: projectMemberUserId,
-          role: projectMemberRole
-        }
+      const responses = await Promise.all(
+        selectedProjectMemberUserIds.map((userId) =>
+          upsertProjectMember(session.accessToken, selectedProjectId, {
+            userId,
+            role: projectMemberRole
+          })
+        )
       );
       setProjectDetail((current) =>
         current
           ? {
               ...current,
-              members: [
-                response.member,
-                ...current.members.filter(
-                  (member) => member.id !== response.member.id
-                )
-              ]
+              members: uniqueById([
+                ...responses.map((response) => response.member),
+                ...current.members
+              ])
             }
           : current
       );
-      setProjectMemberUserId('');
+      setSelectedProjectMemberUserIds([]);
       setProjectMemberRole('contributor');
+      setProjectMemberSearch('');
     } catch (memberError) {
       showError('Project member update failed', memberError);
     }
@@ -917,6 +999,26 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     }
   }
 
+  function closeTaskDetails() {
+    setIsTaskDetailsOpen(false);
+    setSelectedTaskId(null);
+  }
+
+  function openTaskDetails(taskId: string) {
+    setSelectedTaskId(taskId);
+    setIsTaskDetailsOpen(true);
+  }
+
+  function dismissProjectMemberHint() {
+    localStorage.setItem('tixora.projectMemberHintDismissed', 'true');
+    setIsProjectMemberHintDismissed(true);
+  }
+
+  function openProjectMembersSettings() {
+    setProjectSettingsTab('members');
+    setIsProjectToolsOpen(true);
+  }
+
   function formatDueDate(value: string | null) {
     if (!value) return 'No due date';
 
@@ -938,7 +1040,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       <aside className="app-sidebar">
         <div className="sidebar-brand">
           <span className="brand-mark">✓</span>
-          <strong>Organization Task Manager</strong>
+          <strong>Tixora</strong>
           <button
             type="button"
             className="icon-button sidebar-toggle"
@@ -949,7 +1051,29 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           </button>
         </div>
 
-        <nav className="sidebar-nav" aria-label="Workspace views">
+        <OrgSwitcher
+          teams={teams}
+          selectedTeamSlug={selectedTeamSlug}
+          isOpen={isOrgSwitcherOpen}
+          onToggle={() => setIsOrgSwitcherOpen((current) => !current)}
+          onSelect={(slug) => {
+            setSelectedTeamSlug(slug);
+            setSelectedTaskId(null);
+            setIsOrgSwitcherOpen(false);
+          }}
+          onCreate={() => {
+            setWorkspaceName('');
+            setSelectedTeamSlug(null);
+            setIsOrgSwitcherOpen(false);
+          }}
+          getInitials={getInitials}
+        />
+
+        <section className="sidebar-section">
+          <div className="sidebar-section-title">
+            <span>Navigate</span>
+          </div>
+          <nav className="sidebar-nav" aria-label="Workspace views">
           <button type="button" className="nav-item active">
             <span>▦</span>
             <span className="nav-label">Board</span>
@@ -966,29 +1090,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
             <span>↯</span>
             <span className="nav-label">Activity</span>
           </button>
-        </nav>
-
-        <section className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span>Organizations</span>
-          </div>
-          <div className="sidebar-list">
-            {teams.map((team) => (
-              <button
-                key={team.id}
-                type="button"
-                className={
-                  team.slug === selectedTeamSlug ? 'sidebar-row active' : 'sidebar-row'
-                }
-                onClick={() => setSelectedTeamSlug(team.slug)}
-              >
-                <span className="sidebar-dot team-dot">
-                  {getInitials(team.name).slice(0, 1)}
-                </span>
-                <span>{team.name}</span>
-              </button>
-            ))}
-          </div>
+          </nav>
         </section>
 
         <section className="sidebar-section">
@@ -1040,20 +1142,32 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
 
         {teamDetail ? (
           <section className="sidebar-section sidebar-members">
-            <div className="sidebar-section-title">
-              <span>Organization users</span>
-              <small>{workspaceMembers.length}</small>
-            </div>
-            <button
-              type="button"
-              className="sidebar-row members-link"
-              onClick={() => setIsTeamMembersOpen(true)}
-            >
-              <span className="sidebar-dot team-dot">
-                {workspaceMembers.length}
-              </span>
-              <span>Manage users</span>
-            </button>
+            <details className="settings-group" open>
+              <summary className="sidebar-section-title">
+                <span>Settings</span>
+              </summary>
+              <button
+                type="button"
+                className="sidebar-row members-link"
+                onClick={() => setIsTeamMembersOpen(true)}
+              >
+                <span className="sidebar-dot team-dot">
+                  {workspaceMembers.length}
+                </span>
+                <span>Organization members</span>
+              </button>
+              <button
+                type="button"
+                className="sidebar-row members-link"
+                disabled={!selectedProject}
+                onClick={openProjectMembersSettings}
+              >
+                <span className="sidebar-dot team-dot">
+                  {projectMembers.length}
+                </span>
+                <span>Project members</span>
+              </button>
+            </details>
           </section>
         ) : null}
 
@@ -1080,18 +1194,15 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               <p className="section-kicker">Organization setup</p>
               <h1>Set up your ticket board</h1>
               <p>
-                First create the organization, add registered users, create a project,
-                choose who can access that project, then start with your first task.
+                First create the organization and first project. Then you land on
+                the board, where task creation and teammate invites are always available.
               </p>
             </div>
 
             <div className="setup-steps">
               {[
                 [1, "Organization", "Top-level account"],
-                [2, "Users", "People in the organization"],
-                [3, "Project", "Board for tickets"],
-                [4, "Access", "Users allowed on project"],
-                [5, "Task", "First ticket"]
+                [2, "Project", "Board for tickets"]
               ].map(([step, title, body]) => (
                 <div
                   key={step}
@@ -1117,7 +1228,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                 <>
                   <div className="setup-card-heading">
                     <h2>Create organization</h2>
-                    <p>This is where your users, projects, and ticket boards live.</p>
+                    <p>This is where your members, projects, and ticket boards live.</p>
                   </div>
                   <form className="setup-form vertical" onSubmit={handleCreateTeam}>
                     <label>
@@ -1136,100 +1247,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               ) : null}
 
               {setupStep === 2 ? (
-                <>
-                  <div className="setup-card-heading">
-                    <h2>Add organization users</h2>
-                    <p>Search registered users by name or email. You can continue with only yourself.</p>
-                  </div>
-                  <form className="setup-form vertical" onSubmit={handleAddTeamMember}>
-                    <label>
-                      Search registered users
-                      <input
-                        value={userDirectorySearch}
-                        onChange={(event) => {
-                          setUserDirectorySearch(event.target.value);
-                          setSelectedDirectoryUserIds([]);
-                        }}
-                        placeholder="Search by name or email"
-                      />
-                    </label>
-                    <div className="search-result-list">
-                      {!userDirectorySearch.trim() ? (
-                        <p className="meta-text">Type a name or email to find registered users.</p>
-                      ) : null}
-                      {userDirectorySearch.trim() && availableDirectoryUsers.length === 0 ? (
-                        <p className="meta-text">No matching registered users found.</p>
-                      ) : null}
-                      {availableDirectoryUsers.map((user) => (
-                        <label
-                          key={user.id}
-                          className={
-                            selectedDirectoryUserIds.includes(user.id)
-                              ? "search-result user-select-result active"
-                              : "search-result user-select-result"
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedDirectoryUserIds.includes(user.id)}
-                            onChange={(event) => {
-                              setSelectedDirectoryUserIds((current) =>
-                                event.target.checked
-                                  ? [...current, user.id]
-                                  : current.filter((id) => id !== user.id)
-                              );
-                              setTeamMemberEmail('');
-                            }}
-                          />
-                          <span className="avatar">{getInitials(user.displayName)}</span>
-                          <span>
-                            <strong>{user.displayName}</strong>
-                            <small>{user.email}</small>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <label>
-                      Organization role
-                      <select
-                        value={teamMemberRole}
-                        onChange={(event) => setTeamMemberRole(event.target.value as "admin" | "member")}
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </label>
-                    <button type="submit" className="primary-button">
-                      {selectedDirectoryUserIds.length > 0 ? `Add ${selectedDirectoryUserIds.length} users` : "Add user"}
-                    </button>
-                  </form>
-                  <section className="setup-member-summary">
-                    <div className="panel-title-row">
-                      <h3>Organization users</h3>
-                      <span className="meta-text">{workspaceMembers.length}</span>
-                    </div>
-                    <div className="member-list compact">
-                      {workspaceMembers.map((member) => (
-                        <article key={member.id} className="member-row modal-member-row">
-                          <span className="avatar">{getInitials(member.displayName)}</span>
-                          <div>
-                            <strong>{member.displayName}</strong>
-                            <p>{member.email}</p>
-                          </div>
-                          <span className="role-pill">{member.role}</span>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                  <div className="modal-actions split-actions">
-                    <button type="button" className="ghost-button" onClick={() => setIsWorkspaceMembersStepComplete(true)}>
-                      Continue to project
-                    </button>
-                  </div>
-                </>
-              ) : null}
-
-              {setupStep === 3 ? (
                 <>
                   <div className="setup-card-heading">
                     <h2>Create project</h2>
@@ -1255,114 +1272,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                 </>
               ) : null}
 
-              {setupStep === 4 ? (
-                <>
-                  <div className="setup-card-heading">
-                    <h2>Choose project access</h2>
-                    <p>Only users with project access can be assigned to tickets.</p>
-                  </div>
-                  <form className="setup-form vertical" onSubmit={handleAddProjectMember}>
-                    <label>
-                      Search organization users
-                      <input
-                        value={projectMemberSearch}
-                        onChange={(event) => setProjectMemberSearch(event.target.value)}
-                        placeholder="Name or email"
-                      />
-                    </label>
-                    <div className="search-result-list">
-                      {filteredProjectAccessCandidates.length === 0 ? (
-                        <p className="meta-text">No organization users to add.</p>
-                      ) : null}
-                      {filteredProjectAccessCandidates.slice(0, 6).map((member) => (
-                        <button
-                          key={member.id}
-                          type="button"
-                          className={projectMemberUserId === member.id ? "search-result active" : "search-result"}
-                          onClick={() => setProjectMemberUserId(member.id)}
-                        >
-                          <span className="avatar">{getInitials(member.displayName)}</span>
-                          <span>
-                            <strong>{member.displayName}</strong>
-                            <small>{member.email}</small>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    <label>
-                      Project role
-                      <select
-                        value={projectMemberRole}
-                        onChange={(event) => setProjectMemberRole(event.target.value as ProjectMember["role"])}
-                      >
-                        <option value="contributor">Contributor</option>
-                        <option value="manager">Manager</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                    </label>
-                    <button type="submit" className="primary-button">Add to project</button>
-                  </form>
-                  <section className="setup-member-summary">
-                    <div className="panel-title-row">
-                      <h3>Project users</h3>
-                      <span className="meta-text">{projectMembers.length}</span>
-                    </div>
-                    <div className="member-list compact">
-                      {projectMembers.map((member) => (
-                        <article key={member.id} className="member-row modal-member-row">
-                          <span className="avatar">{getInitials(member.displayName)}</span>
-                          <div>
-                            <strong>{member.displayName}</strong>
-                            <p>{member.email}</p>
-                          </div>
-                          <span className="role-pill">{member.role}</span>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                  <div className="modal-actions split-actions">
-                    <button type="button" className="ghost-button" onClick={() => setIsProjectAccessStepComplete(true)}>
-                      Continue to tasks
-                    </button>
-                  </div>
-                </>
-              ) : null}
-
-              {setupStep === 5 ? (
-                <>
-                  <div className="setup-card-heading">
-                    <h2>Create first task</h2>
-                    <p>Create a starter ticket now, or skip and land on the board.</p>
-                  </div>
-                  <form className="setup-form vertical" onSubmit={taskForm.handleSubmit(handleCreateTask)}>
-                    <label>
-                      Task title
-                      <input {...taskForm.register("title")} placeholder="Example: Prepare launch checklist" />
-                    </label>
-                    <label>
-                      Priority
-                      <select {...taskForm.register("priority")}> 
-                        {Object.entries(priorityLabels).map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Due date
-                      <input {...taskForm.register("dueAt")} type="datetime-local" />
-                    </label>
-                    {taskForm.formState.errors.title ? (
-                      <span className="field-error">{taskForm.formState.errors.title.message}</span>
-                    ) : null}
-                    <div className="modal-actions split-actions">
-                      <button type="button" className="ghost-button" onClick={() => setIsSetupComplete(true)}>
-                        Skip to board
-                      </button>
-                      <button type="submit" className="primary-button">Create task and open board</button>
-                    </div>
-                  </form>
-                </>
-              ) : null}
             </div>
           </section>
         ) : !selectedTeamSlug ? (
@@ -1372,7 +1281,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               <h2>Create an organization to start</h2>
               <p>
                 After login, this is your tickets board. Create an organization
-                here, then add projects, users, and tasks from the board.
+                here, then add projects, members, and tasks from the board.
               </p>
             </div>
             <form className="setup-form vertical" onSubmit={handleCreateTeam}>
@@ -1417,7 +1326,10 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   type="button"
                   className="ghost-button"
                   disabled={!selectedProject}
-                  onClick={() => setIsProjectToolsOpen((current) => !current)}
+                  onClick={() => {
+                    setProjectSettingsTab('general');
+                    setIsProjectToolsOpen(true);
+                  }}
                 >
                   Project settings
                 </button>
@@ -1432,62 +1344,78 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               </div>
             </header>
 
-            <div className="board-toolbar">
-              <select
-                disabled={!selectedProject}
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as TaskSummary['status'] | 'all')
-                }
-              >
-                <option value="all">All status</option>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <select
-                disabled={!selectedProject}
-                value={assigneeFilter}
-                onChange={(event) => setAssigneeFilter(event.target.value)}
-              >
-                <option value="all">All assignees</option>
-                  {workspaceMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.displayName}
-                  </option>
-                ))}
-              </select>
-              <select
-                disabled={!selectedProject}
-                value={priorityFilter}
-                onChange={(event) =>
-                  setPriorityFilter(event.target.value as TaskSummary['priority'] | 'all')
-                }
-              >
-                <option value="all">All priority</option>
-                {Object.entries(priorityLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+            <div className="board-toolbar compact-toolbar">
               <input
                 value={taskSearch}
                 onChange={(event) => setTaskSearch(event.target.value)}
                 disabled={!selectedProject}
                 placeholder="Search tasks..."
               />
-              <select
-                disabled={!selectedProject}
-                value={dueFilter}
-                onChange={(event) => setDueFilter(event.target.value as typeof dueFilter)}
-              >
-                <option value="all">All due dates</option>
-                <option value="overdue">Overdue</option>
-                <option value="upcoming">Upcoming</option>
-              </select>
+              <div className="filters-menu">
+                <button
+                  type="button"
+                  className="ghost-button filters-button"
+                  disabled={!selectedProject}
+                  onClick={() => setIsFilterPopoverOpen((current) => !current)}
+                >
+                  Filters
+                </button>
+                {isFilterPopoverOpen ? (
+                  <div className="filters-popover">
+                    <label>
+                      Status
+                      <select
+                        value={statusFilter}
+                        onChange={(event) =>
+                          setStatusFilter(event.target.value as TaskSummary['status'] | 'all')
+                        }
+                      >
+                        <option value="all">All status</option>
+                        {Object.entries(statusLabels).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Assignee
+                      <select
+                        value={assigneeFilter}
+                        onChange={(event) => setAssigneeFilter(event.target.value)}
+                      >
+                        <option value="all">All assignees</option>
+                        {projectMembers.map((member) => (
+                          <option key={member.id} value={member.id}>{member.displayName}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Priority
+                      <select
+                        value={priorityFilter}
+                        onChange={(event) =>
+                          setPriorityFilter(event.target.value as TaskSummary['priority'] | 'all')
+                        }
+                      >
+                        <option value="all">All priority</option>
+                        {Object.entries(priorityLabels).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Due date
+                      <select
+                        value={dueFilter}
+                        onChange={(event) => setDueFilter(event.target.value as typeof dueFilter)}
+                      >
+                        <option value="all">All due dates</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="upcoming">Upcoming</option>
+                      </select>
+                    </label>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {isProjectFormOpen ? (
@@ -1512,6 +1440,32 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   </span>
                 ) : null}
               </form>
+            ) : null}
+
+            {selectedProject && tasks.length === 0 ? (
+              <section className="board-empty-panel board-empty-actions">
+                <div>
+                  <p className="section-kicker">Empty board</p>
+                  <h2>Start your project</h2>
+                  <p>Create the first ticket or invite teammates before planning work.</p>
+                </div>
+                <div className="empty-cta-row">
+                  <button
+                    type="button"
+                    className="primary-button equal-cta"
+                    onClick={() => setIsTaskFormOpen(true)}
+                  >
+                    Create your first task
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button equal-cta"
+                    onClick={() => setIsTeamMembersOpen(true)}
+                  >
+                    Invite your team
+                  </button>
+                </div>
+              </section>
             ) : null}
 
             {!selectedProject ? (
@@ -1561,87 +1515,26 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                           <button
                             type="button"
                             className="task-card-main"
-                            onClick={() => setSelectedTaskId(task.id)}
+                            onClick={() => openTaskDetails(task.id)}
                           >
-                            <strong>{task.title}</strong>
-                            {task.assignees[0] ? (
-                              <span>{task.assignees[0].displayName}</span>
-                            ) : (
-                              <span>Unassigned</span>
-                            )}
+                            <span className="task-card-title-row">
+                              <strong>{task.title}</strong>
+                              <span className={`priority-icon ${task.priority}`} aria-label={`${priorityLabels[task.priority]} priority`} />
+                            </span>
+                            <span className="task-card-footer">
+                              <span className="task-meta">□ {formatDueDate(task.dueAt)}</span>
+                              <span className="mini-avatar-stack">
+                                {task.assignees.slice(0, 3).map((assignee) => (
+                                  <span key={assignee.id} className="avatar mini-avatar">
+                                    {getInitials(assignee.displayName)}
+                                  </span>
+                                ))}
+                                {task.assignees.length === 0 ? <span className="task-meta">Unassigned</span> : null}
+                                {task.assignees.length > 3 ? <span className="task-meta">+{task.assignees.length - 3}</span> : null}
+                              </span>
+                              <span className="task-meta">◇ {task.commentCount}</span>
+                            </span>
                           </button>
-                          <div className="task-card-footer">
-                            <small className={`priority ${task.priority}`}>
-                              {priorityLabels[task.priority]}
-                            </small>
-                            <span className="task-meta">□ {formatDueDate(task.dueAt)}</span>
-                            <span className="task-meta">○ {task.assignees.length}</span>
-                          </div>
-                          {task.id === selectedTaskId ? (
-                            <section className="ticket-preview">
-                              <div className="ticket-preview-grid">
-                                <div>
-                                  <span>Status</span>
-                                  <strong>{statusLabels[task.status]}</strong>
-                                </div>
-                                <div>
-                                  <span>Priority</span>
-                                  <strong>{priorityLabels[task.priority]}</strong>
-                                </div>
-                                <div>
-                                  <span>Due</span>
-                                  <strong>{formatDueDate(task.dueAt)}</strong>
-                                </div>
-                                <div>
-                                  <span>Assignees</span>
-                                  <strong>
-                                    {task.assignees.length > 0
-                                      ? task.assignees
-                                          .map((assignee) => assignee.displayName)
-                                          .join(', ')
-                                      : 'Unassigned'}
-                                  </strong>
-                                </div>
-                              </div>
-                              {task.description ? (
-                                <p className="ticket-preview-description">
-                                  {task.description}
-                                </p>
-                              ) : null}
-                              <div className="ticket-preview-comments">
-                                <div className="ticket-preview-heading">
-                                  <strong>Recent comments</strong>
-                                  <span>{comments.length}</span>
-                                </div>
-                                {comments.length === 0 ? (
-                                  <p>No comments yet.</p>
-                                ) : (
-                                  comments.slice(-2).map((comment) => (
-                                    <article key={comment.id}>
-                                      <strong>{comment.author.displayName}</strong>
-                                      <p>{comment.body}</p>
-                                    </article>
-                                  ))
-                                )}
-                              </div>
-                              <div className="ticket-preview-actions">
-                                <button
-                                  type="button"
-                                  className="ghost-button"
-                                  onClick={() => setSelectedTaskId(null)}
-                                >
-                                  Close
-                                </button>
-                                <button
-                                  type="button"
-                                  className="primary-button"
-                                  onClick={() => setIsTaskDetailsOpen(true)}
-                                >
-                                  Open details
-                                </button>
-                              </div>
-                            </section>
-                          ) : null}
                         </article>
                       ))}
                     </div>
@@ -1717,17 +1610,17 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   </span>
                 </div>
                 <p className="meta-text">
-                  Only project users can be assigned to this task.
+                  Only project members can be assigned to this task.
                 </p>
                 <input
                   value={taskAssigneeSearch}
                   onChange={(event) => setTaskAssigneeSearch(event.target.value)}
-                  placeholder="Search project users"
+                  placeholder="Search project members..."
                 />
                 {projectMembers.length ? (
                   <div className="check-list compact-checks">
                     {filteredTaskAssignees.length === 0 ? (
-                      <p className="meta-text">No matching project users.</p>
+                      <p className="meta-text">No matching project members.</p>
                     ) : null}
                     {filteredTaskAssignees.map((member) => (
                       <label key={member.id} className="check-row assignee-option">
@@ -1745,7 +1638,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   </div>
                 ) : (
                   <p className="meta-text">
-                    No one has project access yet. Add organization users to
+                    No project members yet. Add organization members to
                     this project first.
                   </p>
                 )}
@@ -1755,10 +1648,10 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                     className="ghost-button"
                     onClick={() => {
                       setIsTaskFormOpen(false);
-                      setIsProjectToolsOpen(true);
+                      openProjectMembersSettings();
                     }}
                   >
-                    Manage project access
+                    Manage project members
                   </button>
                   <button
                     type="button"
@@ -1768,7 +1661,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                       setIsTeamMembersOpen(true);
                     }}
                   >
-                    Add organization user
+                    Add organization member
                   </button>
                 </div>
               </section>
@@ -1790,15 +1683,19 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       ) : null}
 
       {isTaskDetailsOpen && selectedTask ? (
-        <div className="modal-backdrop" role="presentation">
+        <div className="drawer-backdrop" role="presentation" onMouseDown={closeTaskDetails}>
           <section
-            className="task-modal task-detail-modal"
+            className="task-detail-drawer"
             role="dialog"
             aria-modal="true"
             aria-labelledby="task-detail-title"
+            onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="modal-heading">
+            <div className="modal-heading task-drawer-heading">
               <div>
+                <p className="drawer-breadcrumb">
+                  {selectedProject?.name ?? 'Project'} / TASK-{selectedTaskNumber ?? '--'}
+                </p>
                 <h2 id="task-detail-title">{selectedTask.title}</h2>
                 <p>
                   {statusLabels[selectedTask.status]} · {formatDueDate(selectedTask.dueAt)}
@@ -1807,7 +1704,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               <button
                 type="button"
                 className="icon-button"
-                onClick={() => setSelectedTaskId(null)}
+                onClick={closeTaskDetails}
                 aria-label="Close task details"
               >
                 ×
@@ -1863,16 +1760,16 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                       </button>
                     </div>
                     <p className="meta-text">
-                      {workspaceMembers.length} organization users ·{' '}
-                      {projectMembers.length} project users available for tasks.
+                      {workspaceMembers.length} organization members ·{' '}
+                      {projectMembers.length} project members available for tasks.
                     </p>
                     <p className="meta-text">
-                      Only users with project access can be assigned here.
+                      Only project members can be assigned here.
                     </p>
                     <div className="check-list compact-checks">
                       {projectMembers.length === 0 ? (
                         <p className="meta-text">
-                          No project users yet. Add organization users to project
+                          No project members yet. Add organization members to project
                           access first.
                         </p>
                       ) : null}
@@ -1899,10 +1796,10 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                         className="ghost-button"
                         onClick={() => {
                           setIsTaskDetailsOpen(false);
-                          setIsProjectToolsOpen(true);
+                          openProjectMembersSettings();
                         }}
                       >
-                        Manage project access
+                        Manage project members
                       </button>
                       <button
                         type="button"
@@ -1912,7 +1809,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                           setIsTeamMembersOpen(true);
                         }}
                       >
-                        Add organization user
+                        Add organization member
                       </button>
                     </div>
                   </section>
@@ -2022,7 +1919,24 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               </button>
             </div>
 
-            <div className="modal-split">
+            <div className="settings-tabs" role="tablist" aria-label="Project settings sections">
+              <button
+                type="button"
+                className={projectSettingsTab === 'general' ? 'tab-button active' : 'tab-button'}
+                onClick={() => setProjectSettingsTab('general')}
+              >
+                General
+              </button>
+              <button
+                type="button"
+                className={projectSettingsTab === 'members' ? 'tab-button active' : 'tab-button'}
+                onClick={() => setProjectSettingsTab('members')}
+              >
+                Members
+              </button>
+            </div>
+
+            {projectSettingsTab === 'general' ? (
               <form
                 className="modal-form"
                 onSubmit={projectEditForm.handleSubmit(handleUpdateProject)}
@@ -2051,40 +1965,56 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   </button>
                 </div>
               </form>
+            ) : null}
 
-              <section className="modal-panel">
+            {projectSettingsTab === 'members' ? (
+              <section className="modal-panel project-members-panel">
+                {!isProjectMemberHintDismissed ? (
+                  <div className="inline-hint">
+                    <p>These are people from your organization. Adding someone here gives them board access.</p>
+                    <button type="button" className="icon-button" onClick={dismissProjectMemberHint} aria-label="Dismiss project member hint">
+                      ×
+                    </button>
+                  </div>
+                ) : null}
                 <div className="panel-title-row">
-                  <h3>Project access</h3>
+                  <h3>Project members</h3>
                   <span className="meta-text">{projectMembers.length}</span>
                 </div>
                 <p className="meta-text">
-                  Add organization users here before assigning them to tasks in
-                  this project.
+                  Project members can open this board and be assigned to tasks.
                 </p>
                 <form className="member-form compact" onSubmit={handleAddProjectMember}>
-                  <label>
-                    Search organization users
-                    <input
-                      value={projectMemberSearch}
-                      onChange={(event) => setProjectMemberSearch(event.target.value)}
-                      placeholder="Name or email"
-                    />
-                  </label>
+                  <UserSearchInput
+                    label="Add from organization members"
+                    value={projectMemberSearch}
+                    onChange={setProjectMemberSearch}
+                    placeholder="Name or email"
+                  />
                   <div className="search-result-list">
                     {filteredProjectAccessCandidates.length === 0 ? (
-                      <p className="meta-text">No organization users to add.</p>
+                      <p className="meta-text">No organization members to add.</p>
                     ) : null}
-                    {filteredProjectAccessCandidates.slice(0, 6).map((member) => (
-                      <button
+                    {filteredProjectAccessCandidates.slice(0, 8).map((member) => (
+                      <label
                         key={member.id}
-                        type="button"
                         className={
-                          projectMemberUserId === member.id
-                            ? 'search-result active'
-                            : 'search-result'
+                          selectedProjectMemberUserIds.includes(member.id)
+                            ? 'search-result user-select-result active'
+                            : 'search-result user-select-result'
                         }
-                        onClick={() => setProjectMemberUserId(member.id)}
                       >
+                        <input
+                          type="checkbox"
+                          checked={selectedProjectMemberUserIds.includes(member.id)}
+                          onChange={(event) => {
+                            setSelectedProjectMemberUserIds((current) =>
+                              event.target.checked
+                                ? [...current, member.id]
+                                : current.filter((id) => id !== member.id)
+                            );
+                          }}
+                        />
                         <span className="avatar">
                           {getInitials(member.displayName)}
                         </span>
@@ -2092,7 +2022,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                           <strong>{member.displayName}</strong>
                           <small>{member.email}</small>
                         </span>
-                      </button>
+                      </label>
                     ))}
                   </div>
                   <select
@@ -2106,7 +2036,9 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                     <option value="viewer">Viewer</option>
                   </select>
                   <button type="submit" className="primary-button">
-                    Add to project
+                    {selectedProjectMemberUserIds.length > 0
+                      ? `Add ${selectedProjectMemberUserIds.length} members to project`
+                      : 'Add to project'}
                   </button>
                 </form>
                 <div className="member-list compact">
@@ -2143,7 +2075,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   ))}
                 </div>
               </section>
-            </div>
+            ) : null}
           </section>
         </div>
       ) : null}
@@ -2158,16 +2090,16 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           >
             <div className="modal-heading">
               <div>
-                <h2 id="team-members-title">Organization users</h2>
+                <h2 id="team-members-title">Organization members</h2>
                 <p>
-                  {teamDetail.name} · {workspaceMembers.length} users
+                  {teamDetail.name} · {workspaceMembers.length} members · {invitedInvitations.length} invited
                 </p>
               </div>
               <button
                 type="button"
                 className="icon-button"
                 onClick={() => setIsTeamMembersOpen(false)}
-                aria-label="Close organization users"
+                aria-label="Close organization members"
               >
                 ×
               </button>
@@ -2175,26 +2107,34 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
 
             <div className="modal-split">
               <form className="modal-form" onSubmit={handleAddTeamMember}>
-                <label>
-                  Search registered users
-                  <input
-                    value={userDirectorySearch}
-                    onChange={(event) => {
-                      setUserDirectorySearch(event.target.value);
-                      setSelectedDirectoryUserIds([]);
-                    }}
-                    placeholder="Search by name or email"
-                  />
-                </label>
+                <UserSearchInput
+                  label="Search registered members"
+                  value={userDirectorySearch}
+                  onChange={(value) => {
+                    setUserDirectorySearch(value);
+                    setSelectedDirectoryUserIds([]);
+                  }}
+                  placeholder="Search by name or email"
+                />
                 <div className="search-result-list">
                   {!userDirectorySearch.trim() ? (
                     <p className="meta-text">
-                      Type a name or email to find registered users.
+                      Type a name or email to find registered members.
                     </p>
                   ) : null}
                   {userDirectorySearch.trim() &&
-                  availableDirectoryUsers.length === 0 ? (
-                    <p className="meta-text">No matching registered users found.</p>
+                  availableDirectoryUsers.length === 0 &&
+                  !canInviteTypedEmail ? (
+                    <p className="meta-text">No matching registered members found.</p>
+                  ) : null}
+                  {canInviteTypedEmail ? (
+                    <InviteRow
+                      email={inviteCandidateEmail}
+                      onSelect={() => {
+                        setTeamMemberEmail(inviteCandidateEmail);
+                        setSelectedDirectoryUserIds([]);
+                      }}
+                    />
                   ) : null}
                   {availableDirectoryUsers.map((user) => (
                     <label
@@ -2253,25 +2193,37 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                 </label>
                 <button type="submit" className="primary-button">
                   {selectedDirectoryUserIds.length > 0
-                    ? `Add ${selectedDirectoryUserIds.length} users`
-                    : 'Add user'}
+                    ? `Add ${selectedDirectoryUserIds.length} members`
+                    : teamMemberEmail || canInviteTypedEmail
+                      ? 'Send invitation'
+                      : 'Add selected members'}
                 </button>
               </form>
 
               <section className="modal-panel team-member-list">
                 <div className="panel-title-row">
-                  <h3>Current organization users</h3>
-                  <span className="meta-text">{workspaceMembers.length}</span>
+                  <h3>Current organization members</h3>
+                  <span className="meta-text">{workspaceMembers.length + invitedInvitations.length}</span>
                 </div>
                 <input
                   value={workspaceMemberSearch}
                   onChange={(event) => setWorkspaceMemberSearch(event.target.value)}
-                  placeholder="Search users"
+                  placeholder="Search members"
                 />
                 <div className="member-list compact">
-                  {filteredWorkspaceMembers.length === 0 ? (
-                    <p className="meta-text">No matching users.</p>
+                  {filteredWorkspaceMembers.length === 0 && invitedInvitations.length === 0 ? (
+                    <p className="meta-text">No matching members.</p>
                   ) : null}
+                  {invitedInvitations.map((invitation) => (
+                    <article key={invitation.id} className="member-row modal-member-row invited-member-row">
+                      <span className="avatar invite-avatar">@</span>
+                      <div>
+                        <strong>{invitation.email}</strong>
+                        <p>Invitation sent</p>
+                      </div>
+                      <span className="role-pill invited">Invited</span>
+                    </article>
+                  ))}
                   {filteredWorkspaceMembers.map((member) => (
                     <article key={member.id} className="member-row modal-member-row">
                       <span className="avatar">

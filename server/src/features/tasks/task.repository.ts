@@ -10,6 +10,20 @@ type ProjectRole = 'manager' | 'contributor' | 'viewer';
 type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
 type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
+export type TaskEventSummary = {
+  id: string;
+  taskId: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  actor: {
+    id: string | null;
+    email: string | null;
+    displayName: string | null;
+  };
+  createdAt: Date;
+};
+
 export type TaskSummary = {
   id: string;
   projectId: string;
@@ -22,11 +36,17 @@ export type TaskSummary = {
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  commentCount: number;
   assignees: Array<{
     id: string;
     email: string;
     displayName: string;
+    hasProjectAccess: boolean;
   }>;
+};
+
+export type TaskDetail = TaskSummary & {
+  events: TaskEventSummary[];
 };
 
 type TaskRow = {
@@ -41,7 +61,20 @@ type TaskRow = {
   completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  comment_count: number;
   assignees: TaskSummary['assignees'];
+};
+
+type TaskEventRow = {
+  id: string;
+  task_id: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  actor_id: string | null;
+  actor_email: string | null;
+  actor_display_name: string | null;
+  created_at: Date;
 };
 
 type ProjectAccessRow = {
@@ -58,6 +91,22 @@ type TaskAccessRow = ProjectAccessRow & {
   is_assignee: boolean;
 };
 
+function toTaskEventSummary(row: TaskEventRow): TaskEventSummary {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    field: row.field,
+    oldValue: row.old_value,
+    newValue: row.new_value,
+    actor: {
+      id: row.actor_id,
+      email: row.actor_email,
+      displayName: row.actor_display_name
+    },
+    createdAt: row.created_at
+  };
+}
+
 function toTaskSummary(row: TaskRow): TaskSummary {
   return {
     id: row.id,
@@ -71,6 +120,7 @@ function toTaskSummary(row: TaskRow): TaskSummary {
     completedAt: row.completed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    commentCount: Number(row.comment_count),
     assignees: row.assignees
   };
 }
@@ -113,6 +163,11 @@ async function findProjectAccessForUser(
         ON pm.project_id = p.id
        AND pm.user_id = $2
       WHERE p.id = $1
+        AND p.deleted_at IS NULL
+        AND (
+          tm.role IN ('owner', 'admin')
+          OR pm.user_id IS NOT NULL
+        )
       LIMIT 1
     `,
     [params.projectId, params.userId]
@@ -151,6 +206,11 @@ async function findTaskAccessForUser(
         ON pm.project_id = p.id
        AND pm.user_id = $2
       WHERE task.id = $1
+        AND task.deleted_at IS NULL
+        AND (
+          tm.role IN ('owner', 'admin')
+          OR pm.user_id IS NOT NULL
+        )
       LIMIT 1
     `,
     [params.taskId, params.userId]
@@ -180,6 +240,59 @@ async function findInvalidProjectAssignees(
   const valid = new Set(result.rows.map((row) => row.user_id));
 
   return params.assigneeIds.filter((id) => !valid.has(id));
+}
+
+async function insertTaskEvent(
+  client: pg.PoolClient,
+  params: {
+    taskId: string;
+    actorId: string;
+    field: string;
+    oldValue?: string | null;
+    newValue?: string | null;
+  }
+) {
+  await client.query(
+    `
+      INSERT INTO task_events (task_id, actor_id, field, old_value, new_value)
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+    [
+      params.taskId,
+      params.actorId,
+      params.field,
+      params.oldValue ?? null,
+      params.newValue ?? null
+    ]
+  );
+}
+
+async function listTaskEvents(
+  client: pg.PoolClient,
+  params: { taskId: string }
+): Promise<TaskEventSummary[]> {
+  const result = await client.query<TaskEventRow>(
+    `
+      SELECT
+        task_events.id,
+        task_events.task_id,
+        task_events.field,
+        task_events.old_value,
+        task_events.new_value,
+        task_events.actor_id,
+        users.email AS actor_email,
+        users.display_name AS actor_display_name,
+        task_events.created_at
+      FROM task_events
+      LEFT JOIN users
+        ON users.id = task_events.actor_id
+      WHERE task_events.task_id = $1
+      ORDER BY task_events.created_at ASC
+    `,
+    [params.taskId]
+  );
+
+  return result.rows.map(toTaskEventSummary);
 }
 
 async function insertTaskAssignees(
@@ -219,12 +332,14 @@ async function findTaskByIdForUser(
         task.completed_at,
         task.created_at,
         task.updated_at,
+        COUNT(DISTINCT comments.id)::int AS comment_count,
         COALESCE(
           json_agg(
             json_build_object(
               'id', u.id,
               'email', u.email,
-              'displayName', u.display_name
+              'displayName', u.display_name,
+              'hasProjectAccess', project_assignee.user_id IS NOT NULL
             )
             ORDER BY ta.assigned_at ASC
           ) FILTER (WHERE u.id IS NOT NULL),
@@ -238,9 +353,24 @@ async function findTaskByIdForUser(
        AND tm.user_id = $2
       LEFT JOIN task_assignees AS ta
         ON ta.task_id = task.id
+      LEFT JOIN comments
+        ON comments.task_id = task.id
       LEFT JOIN users AS u
         ON u.id = ta.user_id
+      LEFT JOIN project_members AS project_assignee
+        ON project_assignee.project_id = task.project_id
+       AND project_assignee.user_id = ta.user_id
       WHERE task.id = $1
+        AND task.deleted_at IS NULL
+        AND (
+          tm.role IN ('owner', 'admin')
+          OR EXISTS (
+            SELECT 1
+            FROM project_members AS requester_project
+            WHERE requester_project.project_id = task.project_id
+              AND requester_project.user_id = $2
+          )
+        )
       GROUP BY task.id
     `,
     [params.taskId, params.userId]
@@ -322,6 +452,22 @@ export async function createTaskForProject(params: {
       assignedBy: params.userId
     });
 
+    await insertTaskEvent(client, {
+      taskId,
+      actorId: params.userId,
+      field: 'created',
+      newValue: params.title
+    });
+
+    if (params.assigneeIds.length > 0) {
+      await insertTaskEvent(client, {
+        taskId,
+        actorId: params.userId,
+        field: 'assignees',
+        newValue: params.assigneeIds.join(',')
+      });
+    }
+
     return findTaskByIdForUser(client, { taskId, userId: params.userId });
   });
 }
@@ -348,12 +494,14 @@ export async function listTasksForProject(params: {
         task.completed_at,
         task.created_at,
         task.updated_at,
+        COUNT(DISTINCT comments.id)::int AS comment_count,
         COALESCE(
           json_agg(
             DISTINCT jsonb_build_object(
               'id', u.id,
               'email', u.email,
-              'displayName', u.display_name
+              'displayName', u.display_name,
+              'hasProjectAccess', project_assignee.user_id IS NOT NULL
             )
           ) FILTER (WHERE u.id IS NOT NULL),
           '[]'::json
@@ -362,13 +510,27 @@ export async function listTasksForProject(params: {
       JOIN team_members AS tm
         ON tm.team_id = p.team_id
        AND tm.user_id = $2
+      LEFT JOIN project_members AS requester_project
+        ON requester_project.project_id = p.id
+       AND requester_project.user_id = $2
       JOIN tasks AS task
         ON task.project_id = p.id
       LEFT JOIN task_assignees AS ta
         ON ta.task_id = task.id
+      LEFT JOIN comments
+        ON comments.task_id = task.id
       LEFT JOIN users AS u
         ON u.id = ta.user_id
+      LEFT JOIN project_members AS project_assignee
+        ON project_assignee.project_id = task.project_id
+       AND project_assignee.user_id = ta.user_id
       WHERE p.id = $1
+        AND p.deleted_at IS NULL
+        AND task.deleted_at IS NULL
+        AND (
+          tm.role IN ('owner', 'admin')
+          OR requester_project.user_id IS NOT NULL
+        )
         AND ($3::task_status IS NULL OR task.status = $3)
         AND ($4::task_priority IS NULL OR task.priority = $4)
         AND ($5::uuid IS NULL OR EXISTS (
@@ -404,7 +566,15 @@ export async function listTasksForProject(params: {
           JOIN team_members AS tm
             ON tm.team_id = p.team_id
            AND tm.user_id = $2
+          LEFT JOIN project_members AS requester_project
+            ON requester_project.project_id = p.id
+           AND requester_project.user_id = $2
           WHERE p.id = $1
+            AND p.deleted_at IS NULL
+            AND (
+              tm.role IN ('owner', 'admin')
+              OR requester_project.user_id IS NOT NULL
+            )
         ) AS exists
       `,
       [params.projectId, params.userId]
@@ -421,8 +591,17 @@ export async function listTasksForProject(params: {
 export async function findTaskDetailForUser(params: {
   taskId: string;
   userId: string;
-}): Promise<TaskSummary | null> {
-  return withTransaction((client) => findTaskByIdForUser(client, params));
+}): Promise<TaskDetail | null> {
+  return withTransaction(async (client) => {
+    const task = await findTaskByIdForUser(client, params);
+
+    if (!task) return null;
+
+    return {
+      ...task,
+      events: await listTaskEvents(client, { taskId: params.taskId })
+    };
+  });
 }
 
 export async function updateTaskForUser(params: {
@@ -444,6 +623,10 @@ export async function updateTaskForUser(params: {
     if (access.archived_at || !canManageTask(access)) {
       return 'forbidden';
     }
+
+    const before = await findTaskByIdForUser(client, params);
+
+    if (!before) return null;
 
     await client.query(
       `
@@ -473,7 +656,34 @@ export async function updateTaskForUser(params: {
       ]
     );
 
-    return findTaskByIdForUser(client, params);
+    const after = await findTaskByIdForUser(client, params);
+
+    if (!after) return null;
+
+    const changedFields: Array<keyof Pick<TaskSummary, 'title' | 'description' | 'status' | 'priority' | 'dueAt'>> = [
+      'title',
+      'description',
+      'status',
+      'priority',
+      'dueAt'
+    ];
+
+    for (const field of changedFields) {
+      const oldValue = before[field] instanceof Date ? before[field]?.toISOString() : before[field];
+      const newValue = after[field] instanceof Date ? after[field]?.toISOString() : after[field];
+
+      if ((oldValue ?? null) !== (newValue ?? null)) {
+        await insertTaskEvent(client, {
+          taskId: params.taskId,
+          actorId: params.userId,
+          field,
+          oldValue: oldValue == null ? null : String(oldValue),
+          newValue: newValue == null ? null : String(newValue)
+        });
+      }
+    }
+
+    return after;
   });
 }
 
@@ -502,6 +712,8 @@ export async function replaceTaskAssigneesForUser(params: {
       return { invalidAssigneeIds };
     }
 
+    const before = await findTaskByIdForUser(client, params);
+
     await client.query('DELETE FROM task_assignees WHERE task_id = $1', [
       params.taskId
     ]);
@@ -510,6 +722,14 @@ export async function replaceTaskAssigneesForUser(params: {
       taskId: params.taskId,
       assigneeIds: params.assigneeIds,
       assignedBy: params.userId
+    });
+
+    await insertTaskEvent(client, {
+      taskId: params.taskId,
+      actorId: params.userId,
+      field: 'assignees',
+      oldValue: before?.assignees.map((assignee) => assignee.id).join(',') ?? null,
+      newValue: params.assigneeIds.join(',')
     });
 
     return findTaskByIdForUser(client, params);

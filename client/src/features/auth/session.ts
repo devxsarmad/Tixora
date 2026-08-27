@@ -1,6 +1,6 @@
 import type { AuthResponse } from './types.js';
 
-const SESSION_KEY = 'team-task-manager.session';
+const SESSION_KEY = 'tixora.session';
 
 export function saveSession(session: AuthResponse) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));

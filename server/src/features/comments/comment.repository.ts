@@ -99,6 +99,12 @@ async function findTaskAccessForUser(
         ON pm.project_id = p.id
        AND pm.user_id = $2
       WHERE task.id = $1
+        AND task.deleted_at IS NULL
+        AND p.deleted_at IS NULL
+        AND (
+          tm.role IN ('owner', 'admin')
+          OR pm.user_id IS NOT NULL
+        )
       LIMIT 1
     `,
     [params.taskId, params.userId]
@@ -133,6 +139,12 @@ async function findCommentAccessForUser(
        AND pm.user_id = $2
       WHERE comments.id = $1
         AND comments.deleted_at IS NULL
+        AND task.deleted_at IS NULL
+        AND p.deleted_at IS NULL
+        AND (
+          tm.role IN ('owner', 'admin')
+          OR pm.user_id IS NOT NULL
+        )
       LIMIT 1
     `,
     [params.commentId, params.userId]
@@ -209,12 +221,21 @@ export async function listCommentsForTask(params: {
       JOIN team_members AS tm
         ON tm.team_id = p.team_id
        AND tm.user_id = $2
+      LEFT JOIN project_members AS requester_project
+        ON requester_project.project_id = p.id
+       AND requester_project.user_id = $2
       JOIN comments
         ON comments.task_id = task.id
        AND comments.deleted_at IS NULL
       JOIN users
         ON users.id = comments.author_id
       WHERE task.id = $1
+        AND task.deleted_at IS NULL
+        AND p.deleted_at IS NULL
+        AND (
+          tm.role IN ('owner', 'admin')
+          OR requester_project.user_id IS NOT NULL
+        )
         AND ($3::timestamptz IS NULL OR comments.created_at > $3)
       ORDER BY comments.created_at ASC
       LIMIT $4
@@ -233,7 +254,16 @@ export async function listCommentsForTask(params: {
           JOIN team_members AS tm
             ON tm.team_id = p.team_id
            AND tm.user_id = $2
+          LEFT JOIN project_members AS requester_project
+            ON requester_project.project_id = p.id
+           AND requester_project.user_id = $2
           WHERE task.id = $1
+            AND task.deleted_at IS NULL
+            AND p.deleted_at IS NULL
+            AND (
+              tm.role IN ('owner', 'admin')
+              OR requester_project.user_id IS NOT NULL
+            )
         ) AS exists
       `,
       [params.taskId, params.userId]

@@ -1,8 +1,8 @@
-# Team Task Manager
+# Tixora
 
 Usage: start here when you want to run or understand the project structure.
 
-Team Task Manager is a production-oriented PERN project for managing teams,
+Tixora is a production-oriented PERN project for managing teams,
 projects, tasks, comments, authentication, role-based access, and task
 assignment.
 
