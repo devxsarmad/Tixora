@@ -216,7 +216,7 @@ export async function listProjectsForTeam(params: {
         p.description,
         accessible_team.team_role,
         requester_project.role AS project_role,
-        COUNT(DISTINCT pm.user_id)::int AS member_count,
+        COUNT(DISTINCT project_member_team.user_id)::int AS member_count,
         COUNT(DISTINCT tasks.id)::int AS task_count,
         p.archived_at,
         p.created_at,
@@ -229,6 +229,9 @@ export async function listProjectsForTeam(params: {
        AND requester_project.user_id = $2
       LEFT JOIN project_members AS pm
         ON pm.project_id = p.id
+      LEFT JOIN team_members AS project_member_team
+        ON project_member_team.team_id = p.team_id
+       AND project_member_team.user_id = pm.user_id
       LEFT JOIN tasks
         ON tasks.project_id = p.id
        AND tasks.deleted_at IS NULL
@@ -320,7 +323,7 @@ export async function findProjectDetailForUser(params: {
         selected_project.description,
         selected_project.team_role,
         selected_project.project_role,
-        COUNT(DISTINCT pm.user_id)::int AS member_count,
+        COUNT(DISTINCT project_member_team.user_id)::int AS member_count,
         COUNT(DISTINCT tasks.id)::int AS task_count,
         selected_project.archived_at,
         selected_project.created_at,
@@ -335,14 +338,17 @@ export async function findProjectDetailForUser(params: {
               'addedAt', pm.added_at
             )
             ORDER BY pm.added_at ASC
-          ) FILTER (WHERE u.id IS NOT NULL),
+          ) FILTER (WHERE project_member_team.user_id IS NOT NULL),
           '[]'::json
         ) AS members
       FROM selected_project
       LEFT JOIN project_members AS pm
         ON pm.project_id = selected_project.id
+      LEFT JOIN team_members AS project_member_team
+        ON project_member_team.team_id = selected_project.team_id
+       AND project_member_team.user_id = pm.user_id
       LEFT JOIN users AS u
-        ON u.id = pm.user_id
+        ON u.id = project_member_team.user_id
       LEFT JOIN tasks
         ON tasks.project_id = selected_project.id
        AND tasks.deleted_at IS NULL
