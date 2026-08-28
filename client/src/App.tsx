@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import tixoraLogo from './assests/tixora-logo.jpeg';
 import { login, register } from './features/auth/authApi.js';
 import { LoginPage } from './features/auth/pages/LoginPage.js';
 import { RegisterPage } from './features/auth/pages/RegisterPage.js';
@@ -57,8 +58,13 @@ export function App() {
   return (
     <main className="auth-shell">
       <section className="auth-hero">
-        <p className="eyebrow">Organization Operations</p>
-        <h1>Tixora</h1>
+        <div className="auth-brand-title">
+          <img src={tixoraLogo} alt="Tixora logo" className="auth-logo" />
+          <div>
+            <p className="eyebrow">Organization Operations</p>
+            <h1>Tixora</h1>
+          </div>
+        </div>
         <p>
           Manage organizations, users, projects, tasks, ownership, and delivery
           in one focused app.

@@ -270,6 +270,30 @@ select[aria-invalid="true"],
   max-width: 620px;
 }
 
+.auth-brand-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.auth-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-hover);
+}
+
+.auth-brand-title .eyebrow {
+  margin-bottom: 6px;
+}
+
+.auth-brand-title h1 {
+  margin-bottom: 0;
+}
+
 .auth-hero h1 {
   margin-bottom: 14px;
   font-size: 38px;
@@ -1127,6 +1151,20 @@ label {
   color: var(--primary);
   background: var(--primary-soft);
   font-size: 19px;
+}
+
+.logo-mark {
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .sidebar-nav,
