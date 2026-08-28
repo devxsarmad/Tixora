@@ -14,6 +14,9 @@ type ProjectSettingsModalProps = {
   project: ProjectSummary | null;
   workspaceMembers: TeamMember[];
   projectMembers: ProjectMember[];
+  isSavingProject?: boolean;
+  isArchivingProject?: boolean;
+  isSavingMembers?: boolean;
   onClose: () => void;
   onUpdateProject: (values: ProjectEditFormValues) => Promise<void> | void;
   onArchiveProject: () => Promise<void> | void;
@@ -39,7 +42,10 @@ export function ProjectSettingsModal({
   onArchiveProject,
   onAddProjectMembers,
   onProjectRoleChange,
-  onRemoveProjectMember
+  onRemoveProjectMember,
+  isSavingProject = false,
+  isArchivingProject = false,
+  isSavingMembers = false
 }: ProjectSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'general' | 'members'>(initialTab);
   const [isProjectMemberHintDismissed, setIsProjectMemberHintDismissed] = useState(
@@ -141,10 +147,12 @@ export function ProjectSettingsModal({
               <input {...projectEditForm.register('description')} placeholder="Description" />
             </label>
             <div className="modal-actions split-actions">
-              <button type="button" className="danger-button" onClick={() => void onArchiveProject()}>
-                Archive
+              <button type="button" className="danger-button" onClick={() => void onArchiveProject()} disabled={isArchivingProject}>
+                {isArchivingProject ? 'Archiving...' : 'Archive'}
               </button>
-              <button type="submit" className="primary-button">Save project</button>
+              <button type="submit" className="primary-button" disabled={isSavingProject}>
+                {isSavingProject ? 'Saving...' : 'Save project'}
+              </button>
             </div>
           </form>
         ) : null}
@@ -222,8 +230,8 @@ export function ProjectSettingsModal({
                 <option value="manager">Manager</option>
                 <option value="viewer">Viewer</option>
               </select>
-              <button type="submit" className="primary-button">
-                {selectedProjectMemberUserIds.length > 0
+              <button type="submit" className="primary-button" disabled={isSavingMembers}>
+                {isSavingMembers ? 'Adding...' : selectedProjectMemberUserIds.length > 0
                   ? 'Add ' + selectedProjectMemberUserIds.length + ' members to project'
                   : 'Add to project'}
               </button>
@@ -253,8 +261,9 @@ export function ProjectSettingsModal({
                     type="button"
                     className="ghost-button"
                     onClick={() => void onRemoveProjectMember(member.id)}
+                    disabled={isSavingMembers}
                   >
-                    Remove
+                    {isSavingMembers ? 'Removing...' : 'Remove'}
                   </button>
                 </article>
               ))}

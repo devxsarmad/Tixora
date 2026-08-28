@@ -30,6 +30,11 @@ type TaskDetailDrawerProps = {
   comments: CommentSummary[];
   priorityLabels: Record<TaskSummary['priority'], string>;
   statusLabels: Record<TaskSummary['status'], string>;
+  isSavingTask?: boolean;
+  isSavingAssignees?: boolean;
+  isCreatingComment?: boolean;
+  isUpdatingComment?: boolean;
+  isDeletingComment?: boolean;
   onClose: () => void;
   onUpdateTask: (values: TaskEditFormValues) => Promise<void> | void;
   onReplaceAssignees: (assigneeIds: string[]) => Promise<void> | void;
@@ -51,6 +56,11 @@ export function TaskDetailDrawer({
   comments,
   priorityLabels,
   statusLabels,
+  isSavingTask = false,
+  isSavingAssignees = false,
+  isCreatingComment = false,
+  isUpdatingComment = false,
+  isDeletingComment = false,
   onClose,
   onUpdateTask,
   onReplaceAssignees,
@@ -147,8 +157,8 @@ export function TaskDetailDrawer({
                 Due date
                 <input {...taskEditForm.register('dueAt')} type="datetime-local" />
               </label>
-              <button type="submit" className="primary-button">
-                Save task
+              <button type="submit" className="primary-button" disabled={isSavingTask}>
+                {isSavingTask ? 'Saving...' : 'Save task'}
               </button>
             </form>
 
@@ -160,8 +170,9 @@ export function TaskDetailDrawer({
                     type="button"
                     className="ghost-button"
                     onClick={() => void onReplaceAssignees(selectedAssigneeIds)}
+                    disabled={isSavingAssignees}
                   >
-                    Save
+                    {isSavingAssignees ? 'Saving...' : 'Save'}
                   </button>
                 </div>
                 <p className="meta-text">
@@ -225,7 +236,9 @@ export function TaskDetailDrawer({
               })}
             >
               <input {...commentForm.register('body')} placeholder="Add a comment..." />
-              <button type="submit" className="primary-button">Send</button>
+              <button type="submit" className="primary-button" disabled={isCreatingComment}>
+                {isCreatingComment ? 'Sending...' : 'Send'}
+              </button>
               {commentForm.formState.errors.body ? (
                 <span className="field-error form-wide">
                   {commentForm.formState.errors.body.message}
@@ -258,8 +271,9 @@ export function TaskDetailDrawer({
                           type="button"
                           className="ghost-button"
                           onClick={() => void onDeleteComment(comment.id)}
+                          disabled={isDeletingComment}
                         >
-                          Delete
+                          {isDeletingComment ? 'Deleting...' : 'Delete'}
                         </button>
                       </div>
                     </div>
@@ -273,7 +287,9 @@ export function TaskDetailDrawer({
                         })}
                       >
                         <input {...commentEditForm.register('body')} placeholder="Edit comment" />
-                        <button type="submit" className="primary-button">Save</button>
+                        <button type="submit" className="primary-button" disabled={isUpdatingComment}>
+                          {isUpdatingComment ? 'Saving...' : 'Save'}
+                        </button>
                       </form>
                     ) : (
                       <p>{comment.body}</p>

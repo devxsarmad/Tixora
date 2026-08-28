@@ -9,6 +9,7 @@ import React, {
   useState
 } from 'react';
 import { useForm } from 'react-hook-form';
+import { Toast } from '../../components/shared/Toast.js';
 import { WorkspaceSidebar } from './WorkspaceSidebar.js';
 import type { AuthResponse } from '../auth/types.js';
 import type {
@@ -107,6 +108,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const [isSetupComplete, setIsSetupComplete] = useState(entryPoint !== 'register');
   const [workspaceName, setWorkspaceName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
   const projectForm = useForm<ProjectFormValues>({
     defaultValues: { name: '', description: '' },
     resolver: zodResolver(projectFormSchema)
@@ -216,6 +218,24 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     selectedTaskId
   );
 
+  const isCreatingOrganization = createOrganizationMutation.isPending;
+  const isCreatingProject = createProjectMutation.isPending;
+  const isSavingOrganizationMembers =
+    addOrganizationMemberMutation.isPending ||
+    createInvitationMutation.isPending ||
+    updateOrganizationMemberMutation.isPending ||
+    removeOrganizationMemberMutation.isPending;
+  const isSavingProjectMembers =
+    upsertProjectMemberMutation.isPending || removeProjectMemberMutation.isPending;
+  const isSavingProject = updateProjectMutation.isPending;
+  const isArchivingProject = archiveProjectMutation.isPending;
+  const isCreatingTask = createTaskMutation.isPending;
+  const isSavingTask = updateTaskMutation.isPending;
+  const isSavingAssignees = replaceTaskAssigneesMutation.isPending;
+  const isCreatingComment = createCommentMutation.isPending;
+  const isUpdatingComment = updateCommentMutation.isPending;
+  const isDeletingComment = deleteCommentMutation.isPending;
+
   const selectedTeam = useMemo(
     () => teams.find((team) => team.slug === selectedTeamSlug) ?? null,
     [selectedTeamSlug, teams]
@@ -280,9 +300,22 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     [visibleTasks]
   );
 
-  function showError(fallback: string, caught: unknown) {
-    setError(caught instanceof Error ? caught.message : fallback);
+  function showToast(message: string, tone: 'success' | 'error' = 'success') {
+    setToast({ message, tone });
   }
+
+  function showError(fallback: string, caught: unknown) {
+    const message = caught instanceof Error ? caught.message : fallback;
+    setError(message);
+    showToast(message, 'error');
+  }
+
+  useEffect(() => {
+    if (!toast) return;
+
+    const timeoutId = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
 
 
   useEffect(() => {
@@ -345,6 +378,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       const response = await createOrganizationMutation.mutateAsync({ name });
       setSelectedTeamSlug(response.team.slug);
       setIsProjectFormOpen(false);
+      showToast('Organization created.');
       setWorkspaceName('');
     } catch (createError) {
       showError('Organization creation failed', createError);
@@ -367,6 +401,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setSelectedTaskId(null);
       projectForm.reset();
       setIsProjectFormOpen(false);
+      showToast('Project created.');
       if (entryPoint === 'register') {
         setIsSetupComplete(true);
       }
@@ -393,6 +428,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           addOrganizationMemberMutation.mutateAsync({ email, role })
         )
       );
+      showToast(emails.length === 1 ? 'Organization member added.' : emails.length + ' organization members added.');
+      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization user update failed', memberError);
     }
@@ -407,6 +444,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     try {
       setError(null);
       await createInvitationMutation.mutateAsync({ email, role });
+      showToast('Invitation sent.');
+      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization user update failed', memberError);
     }
@@ -421,6 +460,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     try {
       setError(null);
       await updateOrganizationMemberMutation.mutateAsync({ userId, role });
+      showToast('Organization role updated.');
+      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization user role update failed', memberError);
     }
@@ -432,6 +473,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     try {
       setError(null);
       await removeOrganizationMemberMutation.mutateAsync(userId);
+      showToast('Organization member removed.');
+      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization user remove failed', memberError);
     }
@@ -453,6 +496,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           upsertProjectMemberMutation.mutateAsync({ userId, role })
         )
       );
+      showToast(userIds.length === 1 ? 'Project member added.' : userIds.length + ' project members added.');
+      setIsProjectToolsOpen(false);
     } catch (memberError) {
       showError('Project member update failed', memberError);
     }
@@ -467,6 +512,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     try {
       setError(null);
       await upsertProjectMemberMutation.mutateAsync({ userId, role });
+      showToast('Project role updated.');
+      setIsProjectToolsOpen(false);
     } catch (memberError) {
       showError('Project member role update failed', memberError);
     }
@@ -478,6 +525,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     try {
       setError(null);
       await removeProjectMemberMutation.mutateAsync(userId);
+      showToast('Project member removed.');
+      setIsProjectToolsOpen(false);
     } catch (memberError) {
       showError('Project member remove failed', memberError);
     }
@@ -492,6 +541,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         name: values.name,
         description: values.description?.trim() || null
       });
+      showToast('Project saved.');
+      setIsProjectToolsOpen(false);
     } catch (updateError) {
       showError('Project update failed', updateError);
     }
@@ -510,6 +561,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         );
         return nextProject?.id ?? null;
       });
+      showToast('Project archived.');
+      setIsProjectToolsOpen(false);
     } catch (archiveError) {
       showError('Project archive failed', archiveError);
     }
@@ -534,6 +587,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setSelectedTaskId(response.task.id);
       setIsTaskFormOpen(false);
       setIsSetupComplete(true);
+      showToast('Task created.');
       return true;
     } catch (createError) {
       showError('Task creation failed', createError);
@@ -555,6 +609,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         }
       });
       setSelectedTaskId(response.task.id);
+      showToast('Task saved.');
+      setIsTaskDetailsOpen(false);
     } catch (updateError) {
       showError('Task update failed', updateError);
     }
@@ -571,6 +627,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         values: { status }
       });
       setSelectedTaskId(response.task.id);
+      showToast('Task status updated.');
     } catch (updateError) {
       showError('Task update failed', updateError);
     }
@@ -596,6 +653,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         assigneeIds
       });
       setSelectedTaskId(response.task.id);
+      showToast('Task assignees updated.');
+      setIsTaskDetailsOpen(false);
     } catch (updateError) {
       showError('Assignee update failed', updateError);
     }
@@ -610,6 +669,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     try {
       setError(null);
       await createCommentMutation.mutateAsync({ body: values.body });
+      showToast('Comment added.');
     } catch (createError) {
       showError('Comment creation failed', createError);
     }
@@ -625,6 +685,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         commentId,
         body: values.body
       });
+      showToast('Comment updated.');
     } catch (updateError) {
       showError('Comment update failed', updateError);
     }
@@ -634,6 +695,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     try {
       setError(null);
       await deleteCommentMutation.mutateAsync(commentId);
+      showToast('Comment deleted.');
     } catch (deleteError) {
       showError('Comment delete failed', deleteError);
     }
@@ -765,8 +827,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                         placeholder="Example: Acme Operations"
                       />
                     </label>
-                    <button type="submit" className="primary-button">
-                      Create organization
+                    <button type="submit" className="primary-button" disabled={isCreatingOrganization}>
+                      {isCreatingOrganization ? 'Creating...' : 'Create organization'}
                     </button>
                   </form>
                 </>
@@ -793,7 +855,9 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                     {projectForm.formState.errors.name ? (
                       <span className="field-error">{projectForm.formState.errors.name.message}</span>
                     ) : null}
-                    <button type="submit" className="primary-button">Create project</button>
+                    <button type="submit" className="primary-button" disabled={isCreatingProject}>
+                      {isCreatingProject ? 'Creating...' : 'Create project'}
+                    </button>
                   </form>
                 </>
               ) : null}
@@ -819,8 +883,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   placeholder="Example: Acme Operations"
                 />
               </label>
-              <button type="submit" className="primary-button">
-                Create organization
+              <button type="submit" className="primary-button" disabled={isCreatingOrganization}>
+                {isCreatingOrganization ? 'Creating...' : 'Create organization'}
               </button>
             </form>
           </section>
@@ -899,8 +963,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   {...projectForm.register('description')}
                   placeholder="Short description"
                 />
-                <button type="submit" className="primary-button">
-                  Create project
+                <button type="submit" className="primary-button" disabled={isCreatingProject}>
+                  {isCreatingProject ? 'Creating...' : 'Create project'}
                 </button>
                 {projectForm.formState.errors.name ? (
                   <span className="field-error form-wide">
@@ -970,6 +1034,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         projectMembers={projectMembers}
         priorityLabels={priorityLabels}
         onClose={() => setIsTaskFormOpen(false)}
+        isSubmitting={isCreatingTask}
         onSubmit={handleCreateTask}
         onManageProjectMembers={() => {
           setIsTaskFormOpen(false);
@@ -992,6 +1057,11 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         comments={comments}
         priorityLabels={priorityLabels}
         statusLabels={statusLabels}
+        isSavingTask={isSavingTask}
+        isSavingAssignees={isSavingAssignees}
+        isCreatingComment={isCreatingComment}
+        isUpdatingComment={isUpdatingComment}
+        isDeletingComment={isDeletingComment}
         onClose={closeTaskDetails}
         onUpdateTask={handleUpdateTask}
         onReplaceAssignees={handleReplaceAssignees}
@@ -1014,6 +1084,9 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         project={selectedProject}
         workspaceMembers={workspaceMembers}
         projectMembers={projectMembers}
+        isSavingProject={isSavingProject}
+        isArchivingProject={isArchivingProject}
+        isSavingMembers={isSavingProjectMembers}
         onClose={() => setIsProjectToolsOpen(false)}
         onUpdateProject={handleUpdateProject}
         onArchiveProject={handleArchiveProject}
@@ -1027,12 +1100,14 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         team={teamDetail}
         members={workspaceMembers}
         invitations={invitations}
+        isSaving={isSavingOrganizationMembers}
         onClose={() => setIsTeamMembersOpen(false)}
         onAddMembers={handleAddOrganizationMembers}
         onInviteMember={handleInviteOrganizationMember}
         onRoleChange={handleTeamRoleChange}
         onRemoveMember={handleRemoveTeamMember}
       />
+      <Toast message={toast?.message ?? null} tone={toast?.tone} />
     </main>
   );
 }

@@ -14,6 +14,7 @@ type OrgMembersModalProps = {
   team: TeamDetail | null;
   members: TeamMember[];
   invitations: InvitationSummary[];
+  isSaving?: boolean;
   onClose: () => void;
   onAddMembers: (emails: string[], role: OrgRole) => Promise<void> | void;
   onInviteMember: (email: string, role: OrgRole) => Promise<void> | void;
@@ -31,7 +32,8 @@ export function OrgMembersModal({
   onAddMembers,
   onInviteMember,
   onRoleChange,
-  onRemoveMember
+  onRemoveMember,
+  isSaving = false
 }: OrgMembersModalProps) {
   const [teamMemberEmail, setTeamMemberEmail] = useState('');
   const [userDirectorySearch, setUserDirectorySearch] = useState('');
@@ -223,8 +225,8 @@ export function OrgMembersModal({
                 <option value="admin">Admin</option>
               </select>
             </label>
-            <button type="submit" className="primary-button">
-              {selectedDirectoryUserIds.length > 0
+            <button type="submit" className="primary-button" disabled={isSaving}>
+              {isSaving ? 'Saving...' : selectedDirectoryUserIds.length > 0
                 ? 'Add ' + selectedDirectoryUserIds.length + ' members'
                 : teamMemberEmail || canInviteTypedEmail
                   ? 'Send invitation'
@@ -281,8 +283,9 @@ export function OrgMembersModal({
                       type="button"
                       className="ghost-button"
                       onClick={() => void onRemoveMember(member.id)}
+                    disabled={isSaving}
                     >
-                      Remove
+                      {isSaving ? 'Removing...' : 'Remove'}
                     </button>
                   ) : null}
                 </article>

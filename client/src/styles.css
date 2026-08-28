@@ -2538,3 +2538,32 @@ svg {
 .selected-badge {
   border-radius: 6px;
 }
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 80;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.toast.success {
+  border-color: var(--status-done-text);
+}
+
+.toast.error {
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+
+button[disabled] {
+  pointer-events: none;
+}

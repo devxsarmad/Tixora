@@ -12,6 +12,7 @@ type CreateTaskModalProps = {
   projectMembers: ProjectMember[];
   priorityLabels: Record<TaskSummary['priority'], string>;
   onClose: () => void;
+  isSubmitting?: boolean;
   onSubmit: (values: TaskFormValues) => Promise<boolean | void> | boolean | void;
   onManageProjectMembers: () => void;
   onAddOrganizationMember: () => void;
@@ -23,6 +24,7 @@ export function CreateTaskModal({
   projectMembers,
   priorityLabels,
   onClose,
+  isSubmitting = false,
   onSubmit,
   onManageProjectMembers,
   onAddOrganizationMember
@@ -68,6 +70,7 @@ export function CreateTaskModal({
             type="button"
             className="icon-button"
             onClick={onClose}
+            disabled={isSubmitting}
             aria-label="Close create task"
           >
             ×
@@ -172,11 +175,11 @@ export function CreateTaskModal({
             </div>
           </section>
           <div className="modal-actions">
-            <button type="button" className="ghost-button" onClick={onClose}>
+            <button type="button" className="ghost-button" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
-            <button type="submit" className="primary-button">
-              Create task
+            <button type="submit" className="primary-button" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating...' : 'Create task'}
             </button>
           </div>
         </form>
