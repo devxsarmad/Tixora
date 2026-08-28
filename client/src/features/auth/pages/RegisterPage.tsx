@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   registerFormSchema,
@@ -11,6 +12,7 @@ type RegisterPageProps = {
 };
 
 export function RegisterPage({ disabled, onSubmit }: RegisterPageProps) {
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const {
     formState: { errors },
     handleSubmit,
@@ -32,6 +34,8 @@ export function RegisterPage({ disabled, onSubmit }: RegisterPageProps) {
           type="text"
           {...register('displayName')}
           autoComplete="name"
+          placeholder="Jane Doe"
+          aria-invalid={Boolean(errors.displayName)}
         />
         {errors.displayName ? (
           <span className="field-error">{errors.displayName.message}</span>
@@ -43,6 +47,8 @@ export function RegisterPage({ disabled, onSubmit }: RegisterPageProps) {
           type="email"
           {...register('email')}
           autoComplete="email"
+          placeholder="you@example.com"
+          aria-invalid={Boolean(errors.email)}
         />
         {errors.email ? (
           <span className="field-error">{errors.email.message}</span>
@@ -50,11 +56,26 @@ export function RegisterPage({ disabled, onSubmit }: RegisterPageProps) {
       </label>
       <label>
         Password
-        <input
-          type="password"
-          {...register('password')}
-          autoComplete="new-password"
-        />
+        <div className="password-field">
+          <input
+            type={isPasswordVisible ? 'text' : 'password'}
+            {...register('password')}
+            autoComplete="new-password"
+            placeholder="Create a secure password"
+            aria-invalid={Boolean(errors.password)}
+          />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setIsPasswordVisible((current) => !current)}
+                aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+        </div>
         {errors.password ? (
           <span className="field-error">{errors.password.message}</span>
         ) : null}
