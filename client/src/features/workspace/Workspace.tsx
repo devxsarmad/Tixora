@@ -10,7 +10,11 @@ import React, {
 } from 'react';
 import { useForm } from 'react-hook-form';
 import { Toast } from '../../components/shared/Toast.js';
+import { ActivityView } from '../activity/ActivityView.js';
+import { CalendarView } from '../calendar/CalendarView.js';
+import { MyTasksView } from '../tasks/my-tasks/MyTasksView.js';
 import { WorkspaceSidebar } from './WorkspaceSidebar.js';
+import type { WorkspaceView } from './workspaceView.js';
 import type { AuthResponse } from '../auth/types.js';
 import type {
   CommentFormValues,
@@ -96,6 +100,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const [selectedTeamSlug, setSelectedTeamSlug] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<WorkspaceView>('board');
   const [includeArchivedProjects, setIncludeArchivedProjects] = useState(false);
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -748,6 +753,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         includeArchivedProjects={includeArchivedProjects}
         isCollapsed={isSidebarCollapsed}
         isOrgSwitcherOpen={isOrgSwitcherOpen}
+        activeView={activeView}
         onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
         onToggleOrgSwitcher={() => setIsOrgSwitcherOpen((current) => !current)}
         onSelectOrganization={(slug) => {
@@ -764,6 +770,11 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         onIncludeArchivedChange={setIncludeArchivedProjects}
         onSelectProject={(projectId) => {
           setSelectedProjectId(projectId);
+          setSelectedTaskId(null);
+          setActiveView('board');
+        }}
+        onSelectView={(view) => {
+          setActiveView(view);
           setSelectedTaskId(null);
         }}
         onOpenOrganizationMembers={() => setIsTeamMembersOpen(true)}
@@ -974,56 +985,86 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               </form>
             ) : null}
 
-            {selectedProject && tasks.length === 0 ? (
-              <section className="board-empty-panel board-empty-actions">
-                <div>
-                  <p className="section-kicker">Empty board</p>
-                  <h2>Start your project</h2>
-                  <p>Create the first ticket or invite teammates before planning work.</p>
-                </div>
-                <div className="empty-cta-row">
-                  <button
-                    type="button"
-                    className="primary-button equal-cta"
-                    onClick={() => setIsTaskFormOpen(true)}
-                  >
-                    Create your first task
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button equal-cta"
-                    onClick={() => setIsTeamMembersOpen(true)}
-                  >
-                    Invite your team
-                  </button>
-                </div>
-              </section>
+            {activeView === 'board' ? (
+              <>
+                {selectedProject && tasks.length === 0 ? (
+                  <section className="board-empty-panel board-empty-actions">
+                    <div>
+                      <p className="section-kicker">Empty board</p>
+                      <h2>Start your project</h2>
+                      <p>Create the first ticket or invite teammates before planning work.</p>
+                    </div>
+                    <div className="empty-cta-row">
+                      <button
+                        type="button"
+                        className="primary-button equal-cta"
+                        onClick={() => setIsTaskFormOpen(true)}
+                      >
+                        Create your first task
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button equal-cta"
+                        onClick={() => setIsTeamMembersOpen(true)}
+                      >
+                        Invite your team
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+
+                {!selectedProject ? (
+                  <section className="locked-panel">
+                    <p className="section-kicker">Project required</p>
+                    <h3>Create or select a project</h3>
+                    <p>
+                      Use the Projects area in the sidebar to choose a project, or
+                      create a new one to unlock the board.
+                    </p>
+                  </section>
+                ) : (
+                  <KanbanBoard
+                    columns={taskColumns}
+                    selectedTaskId={selectedTaskId}
+                    draggingTaskId={draggingTaskId}
+                    dragOverStatus={dragOverStatus}
+                    priorityLabels={priorityLabels}
+                    onOpenTask={openTaskDetails}
+                    onTaskDragStart={handleTaskDragStart}
+                    onTaskDragEnd={handleTaskDragEnd}
+                    onColumnDragOver={handleColumnDragOver}
+                    onColumnDragLeave={handleColumnDragLeave}
+                    onColumnDrop={(event, status) => void handleColumnDrop(event, status)}
+                  />
+                )}
+              </>
             ) : null}
 
-            {!selectedProject ? (
-              <section className="locked-panel">
-                <p className="section-kicker">Project required</p>
-                <h3>Create or select a project</h3>
-                <p>
-                  Use the Projects area in the sidebar to choose a project, or
-                  create a new one to unlock the board.
-                </p>
-              </section>
-            ) : (
-              <KanbanBoard
-                columns={taskColumns}
-                selectedTaskId={selectedTaskId}
-                draggingTaskId={draggingTaskId}
-                dragOverStatus={dragOverStatus}
+            {activeView === 'my-tasks' ? (
+              <MyTasksView
+                tasks={tasks}
+                currentUserId={session.user.id}
                 priorityLabels={priorityLabels}
+                statusLabels={statusLabels}
                 onOpenTask={openTaskDetails}
-                onTaskDragStart={handleTaskDragStart}
-                onTaskDragEnd={handleTaskDragEnd}
-                onColumnDragOver={handleColumnDragOver}
-                onColumnDragLeave={handleColumnDragLeave}
-                onColumnDrop={(event, status) => void handleColumnDrop(event, status)}
               />
-            )}
+            ) : null}
+
+            {activeView === 'calendar' ? (
+              <CalendarView
+                tasks={tasks}
+                statusLabels={statusLabels}
+                onOpenTask={openTaskDetails}
+              />
+            ) : null}
+
+            {activeView === 'activity' ? (
+              <ActivityView
+                tasks={tasks}
+                statusLabels={statusLabels}
+                onOpenTask={openTaskDetails}
+              />
+            ) : null}
           </>
         )}
       </section>

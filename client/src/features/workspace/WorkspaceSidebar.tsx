@@ -4,6 +4,7 @@ import tixoraLogo from '../../assests/tixora-logo.jpeg';
 import type { AuthResponse } from '../auth/types.js';
 import type { ProjectSummary } from '../projects/types.js';
 import type { TeamDetail, TeamSummary } from '../organizations/types.js';
+import type { WorkspaceView } from './workspaceView.js';
 
 type WorkspaceSidebarProps = {
   session: AuthResponse;
@@ -18,6 +19,7 @@ type WorkspaceSidebarProps = {
   includeArchivedProjects: boolean;
   isCollapsed: boolean;
   isOrgSwitcherOpen: boolean;
+  activeView: WorkspaceView;
   onToggleCollapsed: () => void;
   onToggleOrgSwitcher: () => void;
   onSelectOrganization: (slug: string) => void;
@@ -25,6 +27,7 @@ type WorkspaceSidebarProps = {
   onToggleProjectForm: () => void;
   onIncludeArchivedChange: (checked: boolean) => void;
   onSelectProject: (projectId: string) => void;
+  onSelectView: (view: WorkspaceView) => void;
   onOpenOrganizationMembers: () => void;
   onOpenProjectMembers: () => void;
   onLogout: () => void;
@@ -43,6 +46,7 @@ export function WorkspaceSidebar({
   includeArchivedProjects,
   isCollapsed,
   isOrgSwitcherOpen,
+  activeView,
   onToggleCollapsed,
   onToggleOrgSwitcher,
   onSelectOrganization,
@@ -50,6 +54,7 @@ export function WorkspaceSidebar({
   onToggleProjectForm,
   onIncludeArchivedChange,
   onSelectProject,
+  onSelectView,
   onOpenOrganizationMembers,
   onOpenProjectMembers,
   onLogout
@@ -84,10 +89,10 @@ export function WorkspaceSidebar({
       <section className="sidebar-section">
         <div className="sidebar-section-title"><span>Navigate</span></div>
         <nav className="sidebar-nav" aria-label="Workspace views">
-          <button type="button" className="nav-item active"><span className="nav-icon">▦</span><span className="nav-label">Board</span></button>
-          <button type="button" className="nav-item"><span className="nav-icon">◎</span><span className="nav-label">My tasks</span></button>
-          <button type="button" className="nav-item"><span className="nav-icon">□</span><span className="nav-label">Calendar</span></button>
-          <button type="button" className="nav-item"><span className="nav-icon">↯</span><span className="nav-label">Activity</span></button>
+          <button type="button" className={activeView === 'board' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('board')}><span className="nav-icon">▦</span><span className="nav-label">Board</span></button>
+          <button type="button" className={activeView === 'my-tasks' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('my-tasks')}><span className="nav-icon">◎</span><span className="nav-label">My tasks</span></button>
+          <button type="button" className={activeView === 'calendar' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('calendar')}><span className="nav-icon">□</span><span className="nav-label">Calendar</span></button>
+          <button type="button" className={activeView === 'activity' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('activity')}><span className="nav-icon">↯</span><span className="nav-label">Activity</span></button>
         </nav>
       </section>
 
