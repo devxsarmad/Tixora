@@ -1075,19 +1075,19 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           </div>
           <nav className="sidebar-nav" aria-label="Workspace views">
           <button type="button" className="nav-item active">
-            <span>▦</span>
+            <span className="nav-icon">▦</span>
             <span className="nav-label">Board</span>
           </button>
           <button type="button" className="nav-item">
-            <span>◎</span>
+            <span className="nav-icon">◎</span>
             <span className="nav-label">My tasks</span>
           </button>
           <button type="button" className="nav-item">
-            <span>□</span>
+            <span className="nav-icon">□</span>
             <span className="nav-label">Calendar</span>
           </button>
           <button type="button" className="nav-item">
-            <span>↯</span>
+            <span className="nav-icon">↯</span>
             <span className="nav-label">Activity</span>
           </button>
           </nav>
@@ -1302,7 +1302,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           <>
             <header className="board-header">
               <div className="project-title">
-                <span className="project-icon">■</span>
                 <div>
                   <h1>{selectedProject?.name ?? 'Select a project'}</h1>
                   <p>{selectedProject?.description ?? selectedTeam?.name}</p>
@@ -1484,8 +1483,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                     key={column.id}
                     className={
                       dragOverStatus === column.id
-                        ? 'kanban-column drag-over'
-                        : 'kanban-column'
+                        ? `kanban-column status-${column.id.replace('_', '-')} drag-over`
+                        : `kanban-column status-${column.id.replace('_', '-')}`
                     }
                     onDragOver={(event) => handleColumnDragOver(event, column.id)}
                     onDragLeave={() => handleColumnDragLeave(column.id)}
