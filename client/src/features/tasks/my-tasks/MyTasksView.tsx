@@ -24,8 +24,7 @@ export function MyTasksView({
     <section className="workspace-module">
       <div className="module-heading">
         <div>
-          <p className="section-kicker">Personal queue</p>
-          <h2>My tasks</h2>
+            <h2>My tasks</h2>
           <p>Tasks assigned to you in the selected project.</p>
         </div>
         <span className="count-badge">{assignedTasks.length}</span>

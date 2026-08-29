@@ -2,6 +2,7 @@
 // Task business rules: convert repository outcomes into stable HTTP errors and
 // normalize assignment input before SQL sees it.
 
+import { enqueueTaskEmbedding } from '../assistant/embedding.service.js';
 import { HttpError } from '../../shared/http-error.js';
 import {
   createTaskForProject,
@@ -73,7 +74,9 @@ export async function createTask(params: {
     throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND');
   }
 
-  return handleTaskWriteResult(result);
+  const task = handleTaskWriteResult(result);
+  enqueueTaskEmbedding(task.id);
+  return task;
 }
 
 export async function listProjectTasks(params: {
@@ -122,7 +125,9 @@ export async function updateTask(params: {
     dueAt: params.input.dueAt
   });
 
-  return handleTaskWriteResult(result);
+  const task = handleTaskWriteResult(result);
+  enqueueTaskEmbedding(task.id);
+  return task;
 }
 
 export async function replaceTaskAssignees(params: {

@@ -16,7 +16,6 @@ export function ActivityView({ tasks, statusLabels, onOpenTask }: ActivityViewPr
     <section className="workspace-module">
       <div className="module-heading">
         <div>
-          <p className="section-kicker">Recent signals</p>
           <h2>Activity</h2>
           <p>Current project activity summarized from task status, assignees, and comments.</p>
         </div>

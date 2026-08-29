@@ -2,6 +2,7 @@
 // Comment business rules: map repository outcomes into stable API responses and
 // keep route handlers thin.
 
+import { enqueueCommentEmbedding } from '../assistant/embedding.service.js';
 import { HttpError } from '../../shared/http-error.js';
 import {
   createCommentForTask,
@@ -42,7 +43,9 @@ export async function createComment(params: {
     throw new HttpError(404, 'Task not found', 'TASK_NOT_FOUND');
   }
 
-  return handleCommentWriteResult(result);
+  const comment = handleCommentWriteResult(result);
+  enqueueCommentEmbedding(comment.id);
+  return comment;
 }
 
 export async function listTaskComments(params: {
@@ -75,7 +78,9 @@ export async function updateComment(params: {
     body: params.input.body
   });
 
-  return handleCommentWriteResult(result);
+  const comment = handleCommentWriteResult(result);
+  enqueueCommentEmbedding(comment.id);
+  return comment;
 }
 
 export async function deleteComment(params: {
