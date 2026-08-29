@@ -324,10 +324,19 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
 
 
   useEffect(() => {
+    if (organizationsQuery.isLoading) return;
+
     if (!selectedTeamSlug && teams[0]) {
       setSelectedTeamSlug(teams[0].slug);
+      return;
     }
-  }, [selectedTeamSlug, teams]);
+
+    if (selectedTeamSlug && !teams.some((team) => team.slug === selectedTeamSlug)) {
+      setSelectedTeamSlug(teams[0]?.slug ?? null);
+      setSelectedProjectId(null);
+      setSelectedTaskId(null);
+    }
+  }, [organizationsQuery.isLoading, selectedTeamSlug, teams]);
 
   useEffect(() => {
     if (!selectedTeamSlug) {

@@ -59,6 +59,19 @@ function getPriorityLabel(priority: TaskSummary['priority']) {
   return priority[0].toUpperCase() + priority.slice(1) + ' priority';
 }
 
+function getAssigneeLabel(task: TaskSummary) {
+  if (task.assignees.length === 0) return 'Unassigned';
+  if (task.assignees.length <= 2) {
+    return task.assignees.map((assignee) => assignee.displayName || assignee.email).join(', ');
+  }
+
+  const visibleNames = task.assignees
+    .slice(0, 2)
+    .map((assignee) => assignee.displayName || assignee.email)
+    .join(', ');
+  return visibleNames + ' +' + (task.assignees.length - 2);
+}
+
 function sortTasks(left: TaskSummary, right: TaskSummary) {
   const leftDue = parseDueDate(left.dueAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
   const rightDue = parseDueDate(right.dueAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
@@ -168,6 +181,14 @@ export function CalendarView({ tasks, statusLabels, onOpenTask }: CalendarViewPr
                         <span className="calendar-task-title">{task.title}</span>
                         <span className={'priority-icon ' + task.priority} aria-label={getPriorityLabel(task.priority)} />
                         {dueDate ? <span className="calendar-task-time">{timeFormatter.format(dueDate)}</span> : null}
+                        <span className="calendar-task-tooltip" role="tooltip">
+                          <strong>{task.title}</strong>
+                          <span>Status: {statusLabels[task.status]}</span>
+                          <span>Priority: {getPriorityLabel(task.priority).replace(' priority', '')}</span>
+                          <span>Due: {dueDate ? timeFormatter.format(dueDate) : 'No due time'}</span>
+                          <span>Assignees: {getAssigneeLabel(task)}</span>
+                          <span>Comments: {task.commentCount}</span>
+                        </span>
                       </button>
                     );
                   })}

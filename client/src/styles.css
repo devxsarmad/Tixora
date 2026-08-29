@@ -2680,7 +2680,7 @@ button[disabled] {
 }
 
 .calendar-shell {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--calendar-border);
   border-radius: var(--radius-card);
   background: #ffffff;
@@ -2707,6 +2707,7 @@ button[disabled] {
 }
 
 .calendar-day {
+  position: relative;
   min-height: 132px;
   padding: 10px;
   border-right: 1px solid var(--calendar-border);
@@ -2781,6 +2782,7 @@ button[disabled] {
 }
 
 .calendar-task {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -2836,6 +2838,56 @@ button[disabled] {
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
+}
+
+.calendar-task-tooltip {
+  position: absolute;
+  left: 8px;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: grid;
+  gap: 5px;
+  width: min(260px, 72vw);
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-card);
+  color: #ffffff;
+  background: var(--calendar-navy);
+  box-shadow: 0 10px 28px rgba(15, 39, 66, 0.22);
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.calendar-task-tooltip::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 100%;
+  width: 10px;
+  height: 10px;
+  background: var(--calendar-navy);
+  transform: translateY(-5px) rotate(45deg);
+}
+
+.calendar-task-tooltip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.calendar-task-tooltip span {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.calendar-task:hover .calendar-task-tooltip,
+.calendar-task:focus-visible .calendar-task-tooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .calendar-more {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import tixoraLogo from './assests/tixora-logo.jpeg';
 import { login, register } from './features/auth/authApi.js';
 import { LoginPage } from './features/auth/pages/LoginPage.js';
@@ -11,12 +12,12 @@ type AuthMode = 'login' | 'register';
 type AuthEntryPoint = 'login' | 'register' | 'restored';
 
 export function App() {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthResponse | null>(() => loadSession());
   const [mode, setMode] = useState<AuthMode>('login');
   const [authEntryPoint, setAuthEntryPoint] = useState<AuthEntryPoint>('restored');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   async function handleAuth(
     action: () => Promise<AuthResponse>,
     entryPoint: AuthEntryPoint
@@ -26,6 +27,8 @@ export function App() {
 
     try {
       const nextSession = await action();
+      await queryClient.cancelQueries();
+      queryClient.clear();
       saveSession(nextSession);
       setAuthEntryPoint(entryPoint);
       setSession(nextSession);
@@ -40,6 +43,8 @@ export function App() {
 
   function handleLogout() {
     clearSession();
+    void queryClient.cancelQueries();
+    queryClient.clear();
     setSession(null);
     setMode('login');
     setAuthEntryPoint('restored');
@@ -48,6 +53,7 @@ export function App() {
   if (session) {
     return (
       <Workspace
+        key={session.user.id}
         session={session}
         entryPoint={authEntryPoint}
         onLogout={handleLogout}
