@@ -93,6 +93,7 @@ export function WorkspaceSidebar({
           <button type="button" className={activeView === 'my-tasks' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('my-tasks')}><span className="nav-icon">◎</span><span className="nav-label">My tasks</span></button>
           <button type="button" className={activeView === 'calendar' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('calendar')}><span className="nav-icon">□</span><span className="nav-label">Calendar</span></button>
           <button type="button" className={activeView === 'activity' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('activity')}><span className="nav-icon">↯</span><span className="nav-label">Activity</span></button>
+          <button type="button" className={activeView === 'ask' ? 'nav-item active' : 'nav-item'} onClick={() => onSelectView('ask')}><span className="nav-icon">?</span><span className="nav-label">Ask Tixora</span></button>
         </nav>
       </section>
 

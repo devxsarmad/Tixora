@@ -11,6 +11,7 @@ import React, {
 import { useForm } from 'react-hook-form';
 import { Toast } from '../../components/shared/Toast.js';
 import { ActivityView } from '../activity/ActivityView.js';
+import { AskTixoraPanel } from '../assistant/AskTixoraPanel.js';
 import { CalendarView } from '../calendar/CalendarView.js';
 import { MyTasksView } from '../tasks/my-tasks/MyTasksView.js';
 import { WorkspaceSidebar } from './WorkspaceSidebar.js';
@@ -1071,6 +1072,15 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
               <ActivityView
                 tasks={tasks}
                 statusLabels={statusLabels}
+                onOpenTask={openTaskDetails}
+              />
+            ) : null}
+
+            {activeView === 'ask' ? (
+              <AskTixoraPanel
+                token={session.accessToken}
+                orgSlug={selectedTeamSlug}
+                projectId={selectedProjectId}
                 onOpenTask={openTaskDetails}
               />
             ) : null}

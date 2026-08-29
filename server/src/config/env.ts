@@ -16,7 +16,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('1h'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small')
+  OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
+  OPENAI_CHAT_MODEL: z.string().default('gpt-4o-mini')
 });
 
 const parsed = envSchema.safeParse(process.env);
