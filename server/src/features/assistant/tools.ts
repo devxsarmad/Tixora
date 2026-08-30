@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { query } from '../../db/pool.js';
 import { createTask, listProjectTasks, updateTask } from '../tasks/task.service.js';
+import { createComment } from '../comments/comment.service.js';
 import type { TaskSummary } from '../tasks/task.repository.js';
 
 const taskPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
@@ -28,11 +29,46 @@ const createTaskToolSchema = z.object({
   assigneeIds: z.array(z.string().trim().min(1)).max(20).optional()
 });
 
-const updateTaskStatusSchema = z.object({
+const taskReferenceSchema = {
   taskId: z.string().uuid().optional(),
   taskTitle: z.string().trim().min(1).optional(),
+  projectId: z.string().uuid().optional()
+};
+
+const searchTasksSchema = z.object({
+  query: z.string().trim().min(1).max(160),
   projectId: z.string().uuid().optional(),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional()
+});
+
+const updateTaskStatusSchema = z.object({
+  ...taskReferenceSchema,
   status: taskStatusSchema
+}).refine((value) => Boolean(value.taskId || value.taskTitle), {
+  message: 'Provide a taskId or taskTitle',
+  path: ['taskTitle']
+});
+
+const updateTaskPrioritySchema = z.object({
+  ...taskReferenceSchema,
+  priority: taskPrioritySchema
+}).refine((value) => Boolean(value.taskId || value.taskTitle), {
+  message: 'Provide a taskId or taskTitle',
+  path: ['taskTitle']
+});
+
+const updateTaskDueDateSchema = z.object({
+  ...taskReferenceSchema,
+  dueAt: z.string().trim().min(1).nullable()
+}).refine((value) => Boolean(value.taskId || value.taskTitle), {
+  message: 'Provide a taskId or taskTitle',
+  path: ['taskTitle']
+});
+
+const addTaskCommentSchema = z.object({
+  ...taskReferenceSchema,
+  body: z.string().trim().min(1).max(4000)
 }).refine((value) => Boolean(value.taskId || value.taskTitle), {
   message: 'Provide a taskId or taskTitle',
   path: ['taskTitle']
@@ -41,8 +77,12 @@ const updateTaskStatusSchema = z.object({
 export type ToolName =
   | 'list_overdue_tasks'
   | 'summarize_assignee_workload'
+  | 'search_tasks'
   | 'create_task'
-  | 'update_task_status';
+  | 'update_task_status'
+  | 'update_task_priority'
+  | 'update_task_due_date'
+  | 'add_task_comment';
 
 export type AssistantToolCall = {
   id: string;
@@ -125,6 +165,24 @@ export const assistantToolDefinitions = [
   {
     type: 'function',
     function: {
+      name: 'search_tasks',
+      description: 'Search accessible tickets by title or description, optionally scoped to a project/status/priority.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          projectId: { type: 'string', format: 'uuid' },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done'] },
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }
+        },
+        required: ['query'],
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'create_task',
       description: 'Create a task in a project. If assignees are named by the user, pass names/emails in assigneeIds so the server resolves them against project members.',
       parameters: {
@@ -156,6 +214,60 @@ export const assistantToolDefinitions = [
           status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done'] }
         },
         required: ['status'],
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_task_priority',
+      description: 'Update a ticket priority. If the user gives a ticket title, pass taskTitle; do not require a UUID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string', format: 'uuid' },
+          taskTitle: { type: 'string' },
+          projectId: { type: 'string', format: 'uuid' },
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }
+        },
+        required: ['priority'],
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_task_due_date',
+      description: 'Update a ticket due date. If the user gives a ticket title, pass taskTitle; do not require a UUID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string', format: 'uuid' },
+          taskTitle: { type: 'string' },
+          projectId: { type: 'string', format: 'uuid' },
+          dueAt: { type: ['string', 'null'], description: 'Due date as ISO date-time when possible.' }
+        },
+        required: ['dueAt'],
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_task_comment',
+      description: 'Add a comment to a ticket. If the user gives a ticket title, pass taskTitle; do not require a UUID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string', format: 'uuid' },
+          taskTitle: { type: 'string' },
+          projectId: { type: 'string', format: 'uuid' },
+          body: { type: 'string' }
+        },
+        required: ['body'],
         additionalProperties: false
       }
     }
@@ -407,6 +519,66 @@ async function listOverdueTasks(params: { userId: string; orgId: string; project
   }));
 }
 
+async function searchTasks(params: {
+  userId: string;
+  orgId: string;
+  queryText: string;
+  projectId?: string;
+  status?: TaskSummary['status'];
+  priority?: TaskSummary['priority'];
+}) {
+  const result = await query<ToolTaskRow>(
+    `
+      SELECT
+        task.id,
+        task.project_id,
+        task.title,
+        task.status,
+        task.priority,
+        task.due_at,
+        p.name AS project_name,
+        COUNT(DISTINCT ta.user_id)::int AS assignee_count
+      FROM tasks AS task
+      JOIN projects AS p
+        ON p.id = task.project_id
+      JOIN team_members AS tm
+        ON tm.team_id = p.team_id
+       AND tm.user_id = $2
+      LEFT JOIN project_members AS pm
+        ON pm.project_id = p.id
+       AND pm.user_id = $2
+      LEFT JOIN task_assignees AS ta
+        ON ta.task_id = task.id
+      WHERE p.team_id = $1
+        AND ($3::uuid IS NULL OR p.id = $3)
+        AND ($5::task_status IS NULL OR task.status = $5)
+        AND ($6::task_priority IS NULL OR task.priority = $6)
+        AND p.deleted_at IS NULL
+        AND task.deleted_at IS NULL
+        AND (tm.role IN ('owner', 'admin') OR pm.user_id IS NOT NULL)
+        AND (
+          lower(task.title) LIKE '%' || lower($4) || '%' OR
+          lower(coalesce(task.description, '')) LIKE '%' || lower($4) || '%'
+        )
+      GROUP BY task.id, p.name
+      ORDER BY task.updated_at DESC
+      LIMIT 12
+    `,
+    [params.orgId, params.userId, params.projectId ?? null, params.queryText, params.status ?? null, params.priority ?? null]
+  );
+
+  return result.rows.map((task) => ({
+    id: task.id,
+    projectId: task.project_id,
+    projectName: task.project_name,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    dueAt: task.due_at,
+    assigneeCount: task.assignee_count
+  }));
+}
+
 async function summarizeAssigneeWorkload(params: {
   userId: string;
   orgId: string;
@@ -486,6 +658,23 @@ export async function executeAssistantToolCall(params: {
       };
     }
 
+    if (params.call.name === 'search_tasks') {
+      const args = parseToolArguments(params.call.argumentsText, searchTasksSchema);
+      return {
+        toolCallId: params.call.id,
+        toolName: params.call.name,
+        ok: true,
+        result: await searchTasks({
+          userId: params.userId,
+          orgId: params.orgId,
+          queryText: args.query,
+          projectId: args.projectId,
+          status: args.status,
+          priority: args.priority
+        })
+      };
+    }
+
     if (params.call.name === 'summarize_assignee_workload') {
       const args = parseToolArguments(params.call.argumentsText, summarizeAssigneeWorkloadSchema);
       const targetUserId = await resolveWorkloadUserId({
@@ -538,6 +727,54 @@ export async function executeAssistantToolCall(params: {
         input: { status: args.status }
       });
       return { toolCallId: params.call.id, toolName: params.call.name, ok: true, result: formatTask(task) };
+    }
+
+    if (params.call.name === 'update_task_priority') {
+      const args = parseToolArguments(params.call.argumentsText, updateTaskPrioritySchema);
+      const taskId = args.taskId ?? await findAccessibleTaskByTitle({
+        userId: params.userId,
+        orgId: params.orgId,
+        projectId: args.projectId,
+        taskTitle: args.taskTitle ?? ''
+      });
+      const task = await updateTask({
+        taskId,
+        userId: params.userId,
+        input: { priority: args.priority }
+      });
+      return { toolCallId: params.call.id, toolName: params.call.name, ok: true, result: formatTask(task) };
+    }
+
+    if (params.call.name === 'update_task_due_date') {
+      const args = parseToolArguments(params.call.argumentsText, updateTaskDueDateSchema);
+      const taskId = args.taskId ?? await findAccessibleTaskByTitle({
+        userId: params.userId,
+        orgId: params.orgId,
+        projectId: args.projectId,
+        taskTitle: args.taskTitle ?? ''
+      });
+      const task = await updateTask({
+        taskId,
+        userId: params.userId,
+        input: { dueAt: normalizeDueAt(args.dueAt) }
+      });
+      return { toolCallId: params.call.id, toolName: params.call.name, ok: true, result: formatTask(task) };
+    }
+
+    if (params.call.name === 'add_task_comment') {
+      const args = parseToolArguments(params.call.argumentsText, addTaskCommentSchema);
+      const taskId = args.taskId ?? await findAccessibleTaskByTitle({
+        userId: params.userId,
+        orgId: params.orgId,
+        projectId: args.projectId,
+        taskTitle: args.taskTitle ?? ''
+      });
+      const comment = await createComment({
+        taskId,
+        userId: params.userId,
+        input: { body: args.body }
+      });
+      return { toolCallId: params.call.id, toolName: params.call.name, ok: true, result: comment };
     }
 
     return { toolCallId: params.call.id, toolName: params.call.name, ok: false, result: 'Unknown tool' };

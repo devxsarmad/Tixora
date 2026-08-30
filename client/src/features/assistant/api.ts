@@ -12,7 +12,7 @@ export type AskTixoraSource = {
 
 export type AskTixoraToolResult = {
   toolCallId: string;
-  toolName: 'list_overdue_tasks' | 'summarize_assignee_workload' | 'create_task' | 'update_task_status';
+  toolName: 'list_overdue_tasks' | 'summarize_assignee_workload' | 'search_tasks' | 'create_task' | 'update_task_status' | 'update_task_priority' | 'update_task_due_date' | 'add_task_comment';
   ok: boolean;
   result: unknown;
 };

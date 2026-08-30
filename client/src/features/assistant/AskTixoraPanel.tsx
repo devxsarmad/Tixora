@@ -45,6 +45,10 @@ function getToolSummary(toolResults: AskTixoraToolResult[] = []) {
   const successfulTools = toolResults.filter((result) => result.ok).map((result) => result.toolName);
   if (successfulTools.includes('create_task')) return 'Created ticket';
   if (successfulTools.includes('update_task_status')) return 'Updated ticket';
+  if (successfulTools.includes('update_task_priority')) return 'Updated priority';
+  if (successfulTools.includes('update_task_due_date')) return 'Updated due date';
+  if (successfulTools.includes('add_task_comment')) return 'Added comment';
+  if (successfulTools.includes('search_tasks')) return 'Ticket search';
   if (successfulTools.includes('summarize_assignee_workload')) return 'Workload summary';
   if (successfulTools.includes('list_overdue_tasks')) return 'Overdue lookup';
   if (toolResults.some((result) => !result.ok)) return 'Needs attention';
@@ -87,9 +91,10 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
         }
       ]);
 
-      if (response.toolResults?.some((result) => result.toolName === 'create_task' || result.toolName === 'update_task_status')) {
+      if (response.toolResults?.some((result) => ['create_task', 'update_task_status', 'update_task_priority', 'update_task_due_date', 'add_task_comment'].includes(result.toolName))) {
         void queryClient.invalidateQueries({ queryKey: ['tasks'] });
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: ['comments'] });
       }
     } catch (askError) {
       const message = askError instanceof Error ? askError.message : 'Ask Tixora failed';

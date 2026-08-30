@@ -34,8 +34,12 @@ function buildContext(chunks: RetrievalChunk[]) {
 const assistantToolNames: ToolName[] = [
   'list_overdue_tasks',
   'summarize_assignee_workload',
+  'search_tasks',
   'create_task',
-  'update_task_status'
+  'update_task_status',
+  'update_task_priority',
+  'update_task_due_date',
+  'add_task_comment'
 ];
 
 function isAssistantToolName(value: string): value is ToolName {
@@ -137,6 +141,29 @@ function buildToolSuccessAnswer(toolResults: AssistantToolResult[]) {
     return 'Updated ticket ' + (task.title ? '"' + task.title + '"' : '') + ' to ' + (task.status ?? 'the requested status') + '.';
   }
 
+  const priorityResult = toolResults.find((result) => result.ok && result.toolName === 'update_task_priority');
+  if (priorityResult && typeof priorityResult.result === 'object' && priorityResult.result !== null && 'title' in priorityResult.result) {
+    const task = priorityResult.result as { title?: string; priority?: string };
+    return 'Updated ticket ' + (task.title ? '"' + task.title + '"' : '') + ' priority to ' + (task.priority ?? 'the requested priority') + '.';
+  }
+
+  const dueDateResult = toolResults.find((result) => result.ok && result.toolName === 'update_task_due_date');
+  if (dueDateResult && typeof dueDateResult.result === 'object' && dueDateResult.result !== null && 'title' in dueDateResult.result) {
+    const task = dueDateResult.result as { title?: string; dueAt?: string | null };
+    return 'Updated ticket ' + (task.title ? '"' + task.title + '"' : '') + ' due date' + (task.dueAt ? ' to ' + task.dueAt : '') + '.';
+  }
+
+  const commentResult = toolResults.find((result) => result.ok && result.toolName === 'add_task_comment');
+  if (commentResult) return 'Added the comment to the ticket.';
+
+  const searchResult = toolResults.find((result) => result.ok && result.toolName === 'search_tasks');
+  if (searchResult && Array.isArray(searchResult.result)) {
+    const tasks = searchResult.result as Array<{ title?: string }>;
+    if (tasks.length === 0) return 'No matching tickets found in this scope.';
+    const titles = tasks.slice(0, 6).map((task) => task.title).filter(Boolean).join(', ');
+    return 'I found ' + tasks.length + ' matching ticket' + (tasks.length === 1 ? '' : 's') + ': ' + titles + (tasks.length > 6 ? ', and more.' : '.');
+  }
+
   const workloadResult = toolResults.find((result) => result.ok && result.toolName === 'summarize_assignee_workload');
   if (workloadResult && Array.isArray(workloadResult.result)) {
     const rows = workloadResult.result as Array<{
@@ -186,9 +213,11 @@ function buildToolFailureAnswer(toolResults: AssistantToolResult[]) {
   const failure = failedResults[0];
   const action = failure.toolName === 'create_task'
     ? 'create the ticket'
-    : failure.toolName === 'update_task_status'
+    : failure.toolName === 'update_task_status' || failure.toolName === 'update_task_priority' || failure.toolName === 'update_task_due_date'
       ? 'update the ticket'
-      : 'run that request';
+      : failure.toolName === 'add_task_comment'
+        ? 'add the comment'
+        : 'run that request';
 
   return "I couldn't " + action + ': ' + String(failure.result);
 }
