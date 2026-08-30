@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { askTixora, type AskTixoraSource } from './api.js';
 
 type AskMessage = {
@@ -32,6 +33,7 @@ function uniqueSources(sources: AskTixoraSource[] = []) {
 }
 
 export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTixoraPanelProps) {
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<AskMessage[]>([]);
   const [isAsking, setIsAsking] = useState(false);
@@ -68,6 +70,11 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
           sources: response.sources
         }
       ]);
+
+      if (response.toolResults?.some((result) => result.toolName === 'create_task' || result.toolName === 'update_task_status')) {
+        void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      }
     } catch (askError) {
       const message = askError instanceof Error ? askError.message : 'Ask Tixora failed';
       setError(message);

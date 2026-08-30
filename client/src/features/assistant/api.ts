@@ -10,9 +10,17 @@ export type AskTixoraSource = {
   score: number;
 };
 
+export type AskTixoraToolResult = {
+  toolCallId: string;
+  toolName: 'list_overdue_tasks' | 'summarize_assignee_workload' | 'create_task' | 'update_task_status';
+  ok: boolean;
+  result: unknown;
+};
+
 export type AskTixoraResponse = {
   answer: string;
   sources: AskTixoraSource[];
+  toolResults?: AskTixoraToolResult[];
 };
 
 export function askTixora(params: {
