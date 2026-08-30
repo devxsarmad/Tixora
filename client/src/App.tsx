@@ -65,15 +65,14 @@ export function App() {
     <main className="auth-shell">
       <section className="auth-hero">
         <div className="auth-brand-title">
-          <img src={tixoraLogo} alt="Tixora logo" className="auth-logo" />
+          <img src={tixoraLogo} alt="Tixora-AI logo" className="auth-logo" />
           <div>
             <p className="eyebrow">Organization Operations</p>
-            <h1>Tixora</h1>
+            <h1>Tixora-AI</h1>
           </div>
         </div>
         <p>
-          Manage organizations, users, projects, tasks, ownership, and delivery
-          in one focused app.
+          Manage organizations, projects, tickets, delivery, and AI-assisted project operations in one focused app.
         </p>
       </section>
 

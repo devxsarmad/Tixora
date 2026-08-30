@@ -63,9 +63,9 @@ export function WorkspaceSidebar({
     <aside className="app-sidebar">
       <div className="sidebar-brand">
         <span className="brand-mark logo-mark">
-          <img src={tixoraLogo} alt="Tixora logo" />
+          <img src={tixoraLogo} alt="Tixora-AI logo" />
         </span>
-        <strong>Tixora</strong>
+        <strong>Tixora-AI</strong>
         <button
           type="button"
           className="icon-button sidebar-toggle"
