@@ -1,12 +1,14 @@
 import { type FormEvent, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { askTixora, type AskTixoraSource } from './api.js';
+import { askTixora, type AskTixoraSource, type AskTixoraToolResult } from './api.js';
 
 type AskMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   sources?: AskTixoraSource[];
+  toolResults?: AskTixoraToolResult[];
+  tone?: 'normal' | 'error';
 };
 
 type AskTixoraPanelProps = {
@@ -15,6 +17,13 @@ type AskTixoraPanelProps = {
   projectId: string | null;
   onOpenTask: (taskId: string) => void;
 };
+
+const suggestionPrompts = [
+  'How many tickets are in this project?',
+  'List overdue tickets.',
+  'Summarize my workload in this project.',
+  'What is blocked right now?'
+];
 
 function createMessageId() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -32,17 +41,24 @@ function uniqueSources(sources: AskTixoraSource[] = []) {
   });
 }
 
+function getToolSummary(toolResults: AskTixoraToolResult[] = []) {
+  const successfulTools = toolResults.filter((result) => result.ok).map((result) => result.toolName);
+  if (successfulTools.includes('create_task')) return 'Created ticket';
+  if (successfulTools.includes('update_task_status')) return 'Updated ticket';
+  if (successfulTools.includes('summarize_assignee_workload')) return 'Workload summary';
+  if (successfulTools.includes('list_overdue_tasks')) return 'Overdue lookup';
+  if (toolResults.some((result) => !result.ok)) return 'Needs attention';
+  return null;
+}
+
 export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTixoraPanelProps) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<AskMessage[]>([]);
   const [isAsking, setIsAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const trimmedQuery = query.trim();
+  async function askQuestion(rawQuery: string) {
+    const trimmedQuery = rawQuery.trim();
     if (!trimmedQuery || !orgSlug || isAsking) return;
 
     setMessages((current) => [
@@ -50,7 +66,6 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
       { id: createMessageId(), role: 'user', content: trimmedQuery }
     ]);
     setQuery('');
-    setError(null);
     setIsAsking(true);
 
     try {
@@ -67,7 +82,8 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
           id: createMessageId(),
           role: 'assistant',
           content: response.answer,
-          sources: response.sources
+          sources: response.sources,
+          toolResults: response.toolResults
         }
       ]);
 
@@ -77,48 +93,95 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
       }
     } catch (askError) {
       const message = askError instanceof Error ? askError.message : 'Ask Tixora failed';
-      setError(message);
       setMessages((current) => [
         ...current,
-        { id: createMessageId(), role: 'assistant', content: message }
+        { id: createMessageId(), role: 'assistant', content: message, tone: 'error' }
       ]);
     } finally {
       setIsAsking(false);
     }
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void askQuestion(query);
+  }
+
   return (
     <section className="workspace-module ask-tixora-panel">
-      <div className="module-heading">
+      <div className="module-heading ask-heading">
         <div>
           <p className="section-kicker">Ask Tixora</p>
-          <h2>Project answers from your tasks</h2>
-          <p>Read-only answers grounded in your organization and project access.</p>
+          <h2>AI project operations</h2>
+          <p>Ask about tickets, workload, blockers, or run safe project actions from this workspace.</p>
         </div>
       </div>
 
       <div className="ask-chat" aria-live="polite">
         {messages.length === 0 ? (
-          <div className="soft-empty module-empty">Ask what is blocked, who worked on what, or what needs attention.</div>
+          <div className="ask-empty-state">
+            <div className="ask-empty-icon" aria-hidden="true">?</div>
+            <div>
+              <h3>Start with a project question</h3>
+              <p>Ask Tixora can read your accessible tasks and run approved actions like creating tickets or changing status.</p>
+            </div>
+            <div className="ask-suggestions" aria-label="Suggested questions">
+              {suggestionPrompts.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  disabled={!orgSlug || isAsking}
+                  onClick={() => void askQuestion(suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
 
-        {messages.map((message) => (
-          <article key={message.id} className={message.role === 'user' ? 'ask-message user' : 'ask-message assistant'}>
-            <p>{message.content}</p>
-            {message.sources && message.sources.length > 0 ? (
-              <div className="ask-sources" aria-label="Answer sources">
-                {uniqueSources(message.sources).slice(0, 6).map((source) => (
-                  <button key={source.contentType + source.sourceId} type="button" onClick={() => onOpenTask(source.taskId)}>
-                    {source.contentType === 'comment' ? 'Comment' : 'Task'} - {source.taskTitle}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </article>
-        ))}
-      </div>
+        {messages.map((message) => {
+          const toolSummary = getToolSummary(message.toolResults);
+          return (
+            <article
+              key={message.id}
+              className={[
+                'ask-message',
+                message.role,
+                message.tone === 'error' ? 'error' : ''
+              ].filter(Boolean).join(' ')}
+            >
+              {message.role === 'assistant' ? (
+                <div className="ask-message-meta">
+                  <span>Ask Tixora</span>
+                  {toolSummary ? <small>{toolSummary}</small> : null}
+                </div>
+              ) : null}
+              <p>{message.content}</p>
+              {message.sources && message.sources.length > 0 ? (
+                <div className="ask-sources" aria-label="Answer sources">
+                  {uniqueSources(message.sources).slice(0, 6).map((source) => (
+                    <button key={source.contentType + source.sourceId} type="button" onClick={() => onOpenTask(source.taskId)}>
+                      {source.contentType === 'comment' ? 'Comment' : 'Task'} - {source.taskTitle}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
 
-      {error ? <p className="error-message">{error}</p> : null}
+        {isAsking ? (
+          <article className="ask-message assistant loading" aria-label="Ask Tixora is thinking">
+            <div className="ask-message-meta"><span>Ask Tixora</span><small>Thinking</small></div>
+            <div className="ask-typing" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </article>
+        ) : null}
+      </div>
 
       <form className="ask-form" onSubmit={handleSubmit}>
         <input
