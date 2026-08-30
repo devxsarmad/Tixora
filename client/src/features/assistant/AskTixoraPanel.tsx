@@ -1,6 +1,12 @@
 import { type FormEvent, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { askTixora, type AskTixoraSource, type AskTixoraToolResult } from './api.js';
+import {
+  askTixora,
+  confirmTixoraActions,
+  type AskTixoraSource,
+  type AskTixoraToolResult,
+  type PendingAssistantAction
+} from './api.js';
 
 type AskMessage = {
   id: string;
@@ -8,6 +14,7 @@ type AskMessage = {
   content: string;
   sources?: AskTixoraSource[];
   toolResults?: AskTixoraToolResult[];
+  pendingActions?: PendingAssistantAction[];
   tone?: 'normal' | 'error';
 };
 
@@ -41,7 +48,8 @@ function uniqueSources(sources: AskTixoraSource[] = []) {
   });
 }
 
-function getToolSummary(toolResults: AskTixoraToolResult[] = []) {
+function getToolSummary(toolResults: AskTixoraToolResult[] = [], pendingActions: PendingAssistantAction[] = []) {
+  if (pendingActions.length > 0) return 'Confirmation needed';
   const successfulTools = toolResults.filter((result) => result.ok).map((result) => result.toolName);
   if (successfulTools.includes('create_task')) return 'Created ticket';
   if (successfulTools.includes('update_task_status')) return 'Updated ticket';
@@ -55,11 +63,54 @@ function getToolSummary(toolResults: AskTixoraToolResult[] = []) {
   return null;
 }
 
+function parseArguments(argumentsText: string) {
+  try {
+    const value = JSON.parse(argumentsText) as Record<string, unknown>;
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function serializeFieldValue(value: string, existingValue: unknown) {
+  if (Array.isArray(existingValue)) {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  if (existingValue === null) return value.trim() ? value.trim() : null;
+  return value;
+}
+
+function updateActionArgument(action: PendingAssistantAction, argumentKey: string, value: string): PendingAssistantAction {
+  const parsed = parseArguments(action.argumentsText);
+  const nextArgs = {
+    ...parsed,
+    [argumentKey]: serializeFieldValue(value, parsed[argumentKey])
+  };
+
+  return {
+    ...action,
+    argumentsText: JSON.stringify(nextArgs),
+    preview: {
+      ...action.preview,
+      fields: action.preview.fields.map((field) =>
+        field.argumentKey === argumentKey ? { ...field, value } : field
+      )
+    }
+  };
+}
+
 export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTixoraPanelProps) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<AskMessage[]>([]);
   const [isAsking, setIsAsking] = useState(false);
+  const [confirmingActionId, setConfirmingActionId] = useState<string | null>(null);
+
+  function invalidateWorkspaceQueries() {
+    void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    void queryClient.invalidateQueries({ queryKey: ['projects'] });
+    void queryClient.invalidateQueries({ queryKey: ['comments'] });
+  }
 
   async function askQuestion(rawQuery: string) {
     const trimmedQuery = rawQuery.trim();
@@ -87,14 +138,13 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
           role: 'assistant',
           content: response.answer,
           sources: response.sources,
-          toolResults: response.toolResults
+          toolResults: response.toolResults,
+          pendingActions: response.pendingActions
         }
       ]);
 
-      if (response.toolResults?.some((result) => ['create_task', 'update_task_status', 'update_task_priority', 'update_task_due_date', 'add_task_comment'].includes(result.toolName))) {
-        void queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void queryClient.invalidateQueries({ queryKey: ['comments'] });
+      if (response.toolResults.some((result) => ['create_task', 'update_task_status', 'update_task_priority', 'update_task_due_date', 'add_task_comment'].includes(result.toolName))) {
+        invalidateWorkspaceQueries();
       }
     } catch (askError) {
       const message = askError instanceof Error ? askError.message : 'Ask Tixora failed';
@@ -105,6 +155,74 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
     } finally {
       setIsAsking(false);
     }
+  }
+
+  async function confirmAction(messageId: string, action: PendingAssistantAction) {
+    if (!orgSlug || confirmingActionId) return;
+    setConfirmingActionId(action.id);
+
+    try {
+      const response = await confirmTixoraActions({
+        token,
+        orgSlug,
+        pendingActions: [{ id: action.id, toolName: action.toolName, argumentsText: action.argumentsText }],
+        confirmedIds: [action.id]
+      });
+
+      setMessages((current) => [
+        ...current.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                pendingActions: (message.pendingActions ?? []).filter((pendingAction) => pendingAction.id !== action.id)
+              }
+            : message
+        ),
+        {
+          id: createMessageId(),
+          role: 'assistant',
+          content: response.answer,
+          toolResults: response.toolResults
+        }
+      ]);
+      invalidateWorkspaceQueries();
+    } catch (confirmError) {
+      const message = confirmError instanceof Error ? confirmError.message : 'Confirmation failed';
+      setMessages((current) => [
+        ...current,
+        { id: createMessageId(), role: 'assistant', content: message, tone: 'error' }
+      ]);
+    } finally {
+      setConfirmingActionId(null);
+    }
+  }
+
+  function cancelAction(messageId: string, actionId: string) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              pendingActions: (message.pendingActions ?? []).filter((action) => action.id !== actionId)
+            }
+          : message
+      )
+    );
+  }
+
+  function editPendingAction(messageId: string, actionId: string, argumentKey: string, value: string) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              pendingActions: (message.pendingActions ?? []).map((action) =>
+                action.id === actionId ? updateActionArgument(action, argumentKey, value) : action
+              )
+            }
+          : message
+      )
+    );
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -128,7 +246,7 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
             <div className="ask-empty-icon" aria-hidden="true">?</div>
             <div>
               <h3>Start with a project question</h3>
-              <p>Ask Tixora can read your accessible tasks and run approved actions like creating tickets or changing status.</p>
+              <p>Ask Tixora can read your accessible tasks and prepare safe actions like creating tickets or changing status.</p>
             </div>
             <div className="ask-suggestions" aria-label="Suggested questions">
               {suggestionPrompts.map((suggestion) => (
@@ -146,7 +264,8 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
         ) : null}
 
         {messages.map((message) => {
-          const toolSummary = getToolSummary(message.toolResults);
+          const pendingActions = message.pendingActions ?? [];
+          const toolSummary = getToolSummary(message.toolResults, pendingActions);
           return (
             <article
               key={message.id}
@@ -163,6 +282,41 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
                 </div>
               ) : null}
               <p>{message.content}</p>
+              {pendingActions.length > 0 ? (
+                <div className="pending-actions-list">
+                  {pendingActions.map((action) => (
+                    <section key={action.id} className="pending-action-card">
+                      <div className="pending-action-heading">
+                        <div>
+                          <strong>{action.preview.title}</strong>
+                          <p>{action.preview.description}</p>
+                        </div>
+                        <span>{action.toolName}</span>
+                      </div>
+                      <div className="pending-action-fields">
+                        {action.preview.fields.map((field) => (
+                          <label key={action.id + field.argumentKey}>
+                            <span>{field.label}</span>
+                            <input
+                              value={field.value}
+                              disabled={!field.editable || confirmingActionId === action.id}
+                              onChange={(event) => editPendingAction(message.id, action.id, field.argumentKey, event.target.value)}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <div className="pending-action-controls">
+                        <button type="button" className="secondary-button" disabled={confirmingActionId === action.id} onClick={() => cancelAction(message.id, action.id)}>
+                          Cancel
+                        </button>
+                        <button type="button" className="primary-button" disabled={Boolean(confirmingActionId)} onClick={() => void confirmAction(message.id, action)}>
+                          {confirmingActionId === action.id ? 'Confirming...' : 'Confirm'}
+                        </button>
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : null}
               {message.sources && message.sources.length > 0 ? (
                 <div className="ask-sources" aria-label="Answer sources">
                   {uniqueSources(message.sources).slice(0, 6).map((source) => (

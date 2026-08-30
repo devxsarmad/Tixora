@@ -24,6 +24,7 @@ type OpenAIChatResponse = {
 
 type AssistantToolDefinition = {
   type: 'function';
+  mutating?: boolean;
   function: {
     name: string;
     description: string;
@@ -156,7 +157,7 @@ export async function selectAssistantToolCalls(params: {
       model: env.OPENAI_CHAT_MODEL ?? OPENAI_CHAT_MODEL,
       temperature: 0,
       tool_choice: 'auto',
-      tools: params.tools,
+      tools: params.tools.map((tool) => ({ type: tool.type, function: tool.function })),
       messages: [
         { role: 'system', content: toolSystemPrompt },
         {

@@ -13,6 +13,7 @@ type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TaskEventSummary = {
   id: string;
   taskId: string;
+  actorType: 'user' | 'ai_assistant';
   field: string;
   oldValue: string | null;
   newValue: string | null;
@@ -68,6 +69,7 @@ type TaskRow = {
 type TaskEventRow = {
   id: string;
   task_id: string;
+  actor_type: 'user' | 'ai_assistant';
   field: string;
   old_value: string | null;
   new_value: string | null;
@@ -95,6 +97,7 @@ function toTaskEventSummary(row: TaskEventRow): TaskEventSummary {
   return {
     id: row.id,
     taskId: row.task_id,
+    actorType: row.actor_type,
     field: row.field,
     oldValue: row.old_value,
     newValue: row.new_value,
@@ -276,6 +279,7 @@ async function listTaskEvents(
       SELECT
         task_events.id,
         task_events.task_id,
+        task_events.actor_type,
         task_events.field,
         task_events.old_value,
         task_events.new_value,

@@ -97,6 +97,22 @@ export type AssistantToolResult = {
   result: unknown;
 };
 
+export type PendingAssistantAction = {
+  id: string;
+  toolName: ToolName;
+  argumentsText: string;
+  preview: {
+    title: string;
+    description: string;
+    fields: Array<{
+      label: string;
+      value: string;
+      editable: boolean;
+      argumentKey: string;
+    }>;
+  };
+};
+
 type ToolTaskRow = {
   id: string;
   project_id: string;
@@ -136,6 +152,7 @@ type WorkloadRow = {
 export const assistantToolDefinitions = [
   {
     type: 'function',
+    mutating: false,
     function: {
       name: 'list_overdue_tasks',
       description: 'List overdue tasks the requester can access, optionally scoped to a project.',
@@ -148,6 +165,7 @@ export const assistantToolDefinitions = [
   },
   {
     type: 'function',
+    mutating: false,
     function: {
       name: 'summarize_assignee_workload',
       description: 'Summarize workload for one organization/project member. If the user gives a name or email, pass it as userRef; do not invent a UUID.',
@@ -164,6 +182,7 @@ export const assistantToolDefinitions = [
   },
   {
     type: 'function',
+    mutating: false,
     function: {
       name: 'search_tasks',
       description: 'Search accessible tickets by title or description, optionally scoped to a project/status/priority.',
@@ -182,6 +201,7 @@ export const assistantToolDefinitions = [
   },
   {
     type: 'function',
+    mutating: true,
     function: {
       name: 'create_task',
       description: 'Create a task in a project. If assignees are named by the user, pass names/emails in assigneeIds so the server resolves them against project members.',
@@ -202,6 +222,7 @@ export const assistantToolDefinitions = [
   },
   {
     type: 'function',
+    mutating: true,
     function: {
       name: 'update_task_status',
       description: 'Update a task status. If the user gives a ticket title, pass taskTitle; do not require a UUID.',
@@ -220,6 +241,7 @@ export const assistantToolDefinitions = [
   },
   {
     type: 'function',
+    mutating: true,
     function: {
       name: 'update_task_priority',
       description: 'Update a ticket priority. If the user gives a ticket title, pass taskTitle; do not require a UUID.',
@@ -238,6 +260,7 @@ export const assistantToolDefinitions = [
   },
   {
     type: 'function',
+    mutating: true,
     function: {
       name: 'update_task_due_date',
       description: 'Update a ticket due date. If the user gives a ticket title, pass taskTitle; do not require a UUID.',
@@ -256,6 +279,7 @@ export const assistantToolDefinitions = [
   },
   {
     type: 'function',
+    mutating: true,
     function: {
       name: 'add_task_comment',
       description: 'Add a comment to a ticket. If the user gives a ticket title, pass taskTitle; do not require a UUID.',
@@ -273,6 +297,123 @@ export const assistantToolDefinitions = [
     }
   }
 ] as const;
+
+const mutatingToolNames = new Set<ToolName>([
+  'create_task',
+  'update_task_status',
+  'update_task_priority',
+  'update_task_due_date',
+  'add_task_comment'
+]);
+
+function schemaForTool(toolName: ToolName) {
+  if (toolName === 'list_overdue_tasks') return listOverdueTasksSchema;
+  if (toolName === 'summarize_assignee_workload') return summarizeAssigneeWorkloadSchema;
+  if (toolName === 'search_tasks') return searchTasksSchema;
+  if (toolName === 'create_task') return createTaskToolSchema;
+  if (toolName === 'update_task_status') return updateTaskStatusSchema;
+  if (toolName === 'update_task_priority') return updateTaskPrioritySchema;
+  if (toolName === 'update_task_due_date') return updateTaskDueDateSchema;
+  if (toolName === 'add_task_comment') return addTaskCommentSchema;
+  return null;
+}
+
+export function isMutatingAssistantTool(toolName: ToolName) {
+  return mutatingToolNames.has(toolName);
+}
+
+export function validateAssistantToolCall(call: AssistantToolCall) {
+  const schema = schemaForTool(call.name);
+  if (!schema) throw new Error('Unknown tool');
+  return parseToolArguments(call.argumentsText, schema);
+}
+
+function humanizeStatus(status: string | undefined) {
+  if (!status) return '';
+  return status.replace(/_/g, ' ');
+}
+
+function stringifyPreviewValue(value: unknown) {
+  if (Array.isArray(value)) return value.join(', ');
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+
+export function buildPendingAssistantAction(call: AssistantToolCall): PendingAssistantAction {
+  const args = validateAssistantToolCall(call) as Record<string, unknown>;
+  const id = call.id;
+
+  if (call.name === 'create_task') {
+    const title = stringifyPreviewValue(args.title);
+    const priority = stringifyPreviewValue(args.priority || 'medium');
+    return {
+      id,
+      toolName: call.name,
+      argumentsText: call.argumentsText,
+      preview: {
+        title: 'Create ticket',
+        description: 'Create "' + title + '" with ' + priority + ' priority.',
+        fields: [
+          { label: 'Project ID', value: stringifyPreviewValue(args.projectId), editable: true, argumentKey: 'projectId' },
+          { label: 'Task title', value: title, editable: true, argumentKey: 'title' },
+          { label: 'Description', value: stringifyPreviewValue(args.description), editable: true, argumentKey: 'description' },
+          { label: 'Priority', value: priority, editable: true, argumentKey: 'priority' },
+          { label: 'Due date', value: stringifyPreviewValue(args.dueAt), editable: true, argumentKey: 'dueAt' },
+          { label: 'Assignees', value: stringifyPreviewValue(args.assigneeIds), editable: true, argumentKey: 'assigneeIds' }
+        ]
+      }
+    };
+  }
+
+  if (call.name === 'update_task_status') {
+    const taskLabel = stringifyPreviewValue(args.taskTitle || args.taskId);
+    const status = stringifyPreviewValue(args.status);
+    return {
+      id,
+      toolName: call.name,
+      argumentsText: call.argumentsText,
+      preview: {
+        title: 'Update ticket status',
+        description: 'Move "' + taskLabel + '" to ' + humanizeStatus(status) + '.',
+        fields: [
+          { label: 'Ticket', value: taskLabel, editable: true, argumentKey: args.taskTitle ? 'taskTitle' : 'taskId' },
+          { label: 'Project ID', value: stringifyPreviewValue(args.projectId), editable: true, argumentKey: 'projectId' },
+          { label: 'Status', value: status, editable: true, argumentKey: 'status' }
+        ]
+      }
+    };
+  }
+
+  return {
+    id,
+    toolName: call.name,
+    argumentsText: call.argumentsText,
+    preview: {
+      title: 'Confirm action',
+      description: 'Review this assistant action before it runs.',
+      fields: Object.entries(args).map(([key, value]) => ({
+        label: key,
+        value: stringifyPreviewValue(value),
+        editable: true,
+        argumentKey: key
+      }))
+    }
+  };
+}
+
+export async function logAssistantActionEvent(params: { userId: string; toolName: ToolName; result: unknown }) {
+  if (typeof params.result !== 'object' || params.result === null || !('id' in params.result)) return;
+  const taskId = (params.result as { id?: unknown }).id;
+  if (typeof taskId !== 'string') return;
+
+  await query(
+    `
+      INSERT INTO task_events (task_id, actor_id, actor_type, field, old_value, new_value)
+      VALUES ($1, $2, 'ai_assistant', 'ai_assistant', NULL, $3)
+    `,
+    [taskId, params.userId, params.toolName]
+  );
+}
 
 function formatZodIssues(error: z.ZodError) {
   return error.issues

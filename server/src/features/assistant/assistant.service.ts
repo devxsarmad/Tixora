@@ -2,12 +2,17 @@ import { HttpError } from '../../shared/http-error.js';
 import { generateGroundedAnswer, selectAssistantToolCalls } from './llmClient.js';
 import { countAccessibleTasks, resolveAssistantScope } from './assistant.repository.js';
 import { retrieveRelevantChunks } from './embedding.service.js';
-import type { AskAssistantInput } from './assistant.schemas.js';
+import type { AskAssistantInput, ConfirmAssistantActionsInput } from './assistant.schemas.js';
 import {
   assistantToolDefinitions,
+  buildPendingAssistantAction,
   executeAssistantToolCall,
+  isMutatingAssistantTool,
+  logAssistantActionEvent,
+  validateAssistantToolCall,
   type AssistantToolCall,
   type AssistantToolResult,
+  type PendingAssistantAction,
   type ToolName
 } from './tools.js';
 import type { RetrievalChunk } from './types.js';
@@ -29,6 +34,50 @@ function buildContext(chunks: RetrievalChunk[]) {
       ].join('\n');
     })
     .join('\n\n');
+}
+
+type StoredPendingAction = {
+  userId: string;
+  orgId: string;
+  toolName: ToolName;
+  expiresAt: number;
+  resolved: boolean;
+};
+
+const pendingActionStore = new Map<string, StoredPendingAction>();
+const pendingActionTtlMs = 10 * 60 * 1000;
+
+function storePendingActions(params: { userId: string; orgId: string; actions: PendingAssistantAction[] }) {
+  const expiresAt = Date.now() + pendingActionTtlMs;
+  for (const action of params.actions) {
+    pendingActionStore.set(action.id, {
+      userId: params.userId,
+      orgId: params.orgId,
+      toolName: action.toolName,
+      expiresAt,
+      resolved: false
+    });
+  }
+}
+
+function takePendingAction(params: { id: string; userId: string; orgId: string; toolName: ToolName }) {
+  const stored = pendingActionStore.get(params.id);
+  if (!stored || stored.resolved || stored.expiresAt < Date.now()) {
+    if (stored) pendingActionStore.delete(params.id);
+    return 'action already resolved or expired';
+  }
+
+  if (stored.userId !== params.userId || stored.orgId !== params.orgId || stored.toolName !== params.toolName) {
+    return 'action already resolved or expired';
+  }
+
+  stored.resolved = true;
+  pendingActionStore.set(params.id, stored);
+  return null;
+}
+
+function emptySources() {
+  return [] as [];
 }
 
 const assistantToolNames: ToolName[] = [
@@ -261,6 +310,7 @@ export async function askAssistant(params: {
     return {
       answer: buildTaskCountAnswer(counts, Boolean(params.input.projectId)),
       toolResults: [],
+      pendingActions: [],
       sources: []
     };
   }
@@ -278,13 +328,11 @@ export async function askAssistant(params: {
   } catch (error) {
     throw toAssistantHttpError(error, 'Assistant retrieval failed');
   }
-  console.log("---------------context--------------------")
 
   const context = [
     params.input.projectId ? 'Current project ID: ' + params.input.projectId : '',
     buildContext(chunks)
   ].filter(Boolean).join('\n\n');
-  console.log(context , "context ")
   let selectedToolCalls = [];
 
   try {
@@ -309,8 +357,14 @@ export async function askAssistant(params: {
     ];
   }, []);
 
+  const mutatingToolCalls = toolCalls.filter((call) => isMutatingAssistantTool(call.name));
+  const nonMutatingToolCalls = toolCalls.filter((call) => !isMutatingAssistantTool(call.name));
+
+  const pendingActions = mutatingToolCalls.map((call) => buildPendingAssistantAction(call));
+  storePendingActions({ userId: params.userId, orgId: scope.orgId, actions: pendingActions });
+
   const toolResults = await Promise.all(
-    toolCalls.map((call) =>
+    nonMutatingToolCalls.map((call) =>
       executeAssistantToolCall({
         call,
         userId: params.userId,
@@ -319,11 +373,21 @@ export async function askAssistant(params: {
     )
   );
 
+  if (pendingActions.length > 0) {
+    return {
+      answer: pendingActions.length === 1 ? 'Review and confirm this action before I run it.' : 'Review and confirm these actions before I run them.',
+      toolResults,
+      pendingActions,
+      sources: emptySources()
+    };
+  }
+
   const toolFailureAnswer = buildToolFailureAnswer(toolResults);
   if (toolFailureAnswer) {
     return {
       answer: toolFailureAnswer,
       toolResults,
+      pendingActions: [],
       sources: []
     };
   }
@@ -333,6 +397,7 @@ export async function askAssistant(params: {
     return {
       answer: toolSuccessAnswer,
       toolResults,
+      pendingActions: [],
       sources: []
     };
   }
@@ -348,18 +413,114 @@ export async function askAssistant(params: {
   } catch (error) {
     throw toAssistantHttpError(error, 'Assistant answer generation failed');
   }
-console.log(answer,"answer")
+
   return {
     answer: answer ?? buildFallbackAnswer(chunks, toolResults),
     toolResults,
-    sources: chunks.map((chunk) => ({
-      taskId: chunk.taskId,
-      projectId: chunk.projectId,
-      contentType: chunk.contentType,
-      sourceId: chunk.sourceId,
-      commentId: chunk.commentId,
-      taskTitle: chunk.taskTitle,
-      score: chunk.score
-    }))
+    pendingActions: [],
+    sources: []
+  };
+}
+
+
+export async function confirmAssistantActions(params: {
+  userId: string;
+  orgSlug?: string;
+  input: ConfirmAssistantActionsInput;
+}) {
+  const scope = await resolveAssistantScope({
+    userId: params.userId,
+    orgSlug: params.orgSlug
+  });
+
+  if (!scope) {
+    throw new HttpError(404, 'Assistant scope not found', 'ASSISTANT_SCOPE_NOT_FOUND');
+  }
+
+  const confirmedIds = new Set(params.input.confirmedIds);
+  const toolResults: AssistantToolResult[] = [];
+
+  for (const pendingAction of params.input.pendingActions) {
+    if (!isAssistantToolName(pendingAction.toolName)) {
+      toolResults.push({
+        toolCallId: pendingAction.id,
+        toolName: pendingAction.toolName as ToolName,
+        ok: false,
+        result: 'Unknown tool'
+      });
+      continue;
+    }
+
+    const replayError = takePendingAction({
+      id: pendingAction.id,
+      userId: params.userId,
+      orgId: scope.orgId,
+      toolName: pendingAction.toolName
+    });
+
+    if (replayError) {
+      toolResults.push({
+        toolCallId: pendingAction.id,
+        toolName: pendingAction.toolName,
+        ok: false,
+        result: replayError
+      });
+      continue;
+    }
+
+    if (!confirmedIds.has(pendingAction.id)) continue;
+
+    if (!isMutatingAssistantTool(pendingAction.toolName)) {
+      toolResults.push({
+        toolCallId: pendingAction.id,
+        toolName: pendingAction.toolName,
+        ok: false,
+        result: 'Only pending write actions can be confirmed'
+      });
+      continue;
+    }
+
+    try {
+      validateAssistantToolCall({
+        id: pendingAction.id,
+        name: pendingAction.toolName,
+        argumentsText: pendingAction.argumentsText
+      });
+
+      const result = await executeAssistantToolCall({
+        call: {
+          id: pendingAction.id,
+          name: pendingAction.toolName,
+          argumentsText: pendingAction.argumentsText
+        },
+        userId: params.userId,
+        orgId: scope.orgId
+      });
+
+      if (result.ok) {
+        await logAssistantActionEvent({
+          userId: params.userId,
+          toolName: pendingAction.toolName,
+          result: result.result
+        });
+      }
+
+      toolResults.push(result);
+    } catch (error) {
+      toolResults.push({
+        toolCallId: pendingAction.id,
+        toolName: pendingAction.toolName,
+        ok: false,
+        result: error instanceof Error ? error.message : 'Tool execution failed'
+      });
+    }
+  }
+
+  const toolFailureAnswer = buildToolFailureAnswer(toolResults);
+  const toolSuccessAnswer = buildToolSuccessAnswer(toolResults);
+
+  return {
+    answer: toolFailureAnswer ?? toolSuccessAnswer ?? 'No confirmed actions were executed.',
+    toolResults
   };
 }

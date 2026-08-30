@@ -3270,6 +3270,97 @@ button[disabled] {
   }
 }
 
+
+.pending-actions-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pending-action-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg);
+}
+
+.pending-action-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pending-action-heading strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.pending-action-heading p {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.pending-action-heading > span {
+  min-height: 22px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pending-action-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.pending-action-fields label {
+  display: grid;
+  gap: 4px;
+}
+
+.pending-action-fields label > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pending-action-fields input {
+  min-height: 36px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.pending-action-fields input:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.pending-action-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pending-action-controls .primary-button,
+.pending-action-controls .secondary-button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 .ask-sources {
   display: flex;
   flex-wrap: wrap;

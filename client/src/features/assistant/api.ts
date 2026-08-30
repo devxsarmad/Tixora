@@ -10,17 +10,41 @@ export type AskTixoraSource = {
   score: number;
 };
 
+export type AskTixoraToolName = 'list_overdue_tasks' | 'summarize_assignee_workload' | 'search_tasks' | 'create_task' | 'update_task_status' | 'update_task_priority' | 'update_task_due_date' | 'add_task_comment';
+
 export type AskTixoraToolResult = {
   toolCallId: string;
-  toolName: 'list_overdue_tasks' | 'summarize_assignee_workload' | 'search_tasks' | 'create_task' | 'update_task_status' | 'update_task_priority' | 'update_task_due_date' | 'add_task_comment';
+  toolName: AskTixoraToolName;
   ok: boolean;
   result: unknown;
 };
 
+export type PendingAssistantAction = {
+  id: string;
+  toolName: AskTixoraToolName;
+  argumentsText: string;
+  preview: {
+    title: string;
+    description: string;
+    fields: Array<{
+      label: string;
+      value: string;
+      editable: boolean;
+      argumentKey: string;
+    }>;
+  };
+};
+
 export type AskTixoraResponse = {
   answer: string;
+  toolResults: AskTixoraToolResult[];
+  pendingActions: PendingAssistantAction[];
   sources: AskTixoraSource[];
-  toolResults?: AskTixoraToolResult[];
+};
+
+export type ConfirmTixoraResponse = {
+  answer: string;
+  toolResults: AskTixoraToolResult[];
 };
 
 export function askTixora(params: {
@@ -38,6 +62,26 @@ export function askTixora(params: {
     body: JSON.stringify({
       query: params.query,
       projectId: params.projectId
+    })
+  });
+}
+
+
+export function confirmTixoraActions(params: {
+  token: string;
+  orgSlug: string;
+  pendingActions: Array<{ id: string; toolName: AskTixoraToolName; argumentsText: string }>;
+  confirmedIds: string[];
+}) {
+  return apiRequest<ConfirmTixoraResponse>('/api/assistant/confirm', {
+    method: 'POST',
+    headers: {
+      ...authHeaders(params.token),
+      'x-tixora-org-slug': params.orgSlug
+    },
+    body: JSON.stringify({
+      pendingActions: params.pendingActions,
+      confirmedIds: params.confirmedIds
     })
   });
 }
