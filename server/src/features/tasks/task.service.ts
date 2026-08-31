@@ -122,7 +122,8 @@ export async function updateTask(params: {
     description: params.input.description,
     status: params.input.status,
     priority: params.input.priority,
-    dueAt: params.input.dueAt
+    dueAt: params.input.dueAt,
+    assigneeIds: params.input.assigneeIds === undefined ? undefined : uniqueIds(params.input.assigneeIds)
   });
 
   const task = handleTaskWriteResult(result);

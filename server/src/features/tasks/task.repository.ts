@@ -616,7 +616,8 @@ export async function updateTaskForUser(params: {
   status?: TaskStatus;
   priority?: TaskPriority;
   dueAt?: string | null;
-}): Promise<TaskSummary | null | 'forbidden'> {
+  assigneeIds?: string[];
+}): Promise<TaskSummary | null | 'forbidden' | { invalidAssigneeIds: string[] }> {
   return withTransaction(async (client) => {
     const access = await findTaskAccessForUser(client, params);
 
@@ -631,6 +632,17 @@ export async function updateTaskForUser(params: {
     const before = await findTaskByIdForUser(client, params);
 
     if (!before) return null;
+
+    if (params.assigneeIds !== undefined) {
+      const invalidAssigneeIds = await findInvalidProjectAssignees(client, {
+        projectId: access.project_id,
+        assigneeIds: params.assigneeIds
+      });
+
+      if (invalidAssigneeIds.length > 0) {
+        return { invalidAssigneeIds };
+      }
+    }
 
     await client.query(
       `
@@ -660,6 +672,18 @@ export async function updateTaskForUser(params: {
       ]
     );
 
+    if (params.assigneeIds !== undefined) {
+      await client.query('DELETE FROM task_assignees WHERE task_id = $1', [
+        params.taskId
+      ]);
+
+      await insertTaskAssignees(client, {
+        taskId: params.taskId,
+        assigneeIds: params.assigneeIds,
+        assignedBy: params.userId
+      });
+    }
+
     const after = await findTaskByIdForUser(client, params);
 
     if (!after) return null;
@@ -671,6 +695,21 @@ export async function updateTaskForUser(params: {
       'priority',
       'dueAt'
     ];
+
+    if (params.assigneeIds !== undefined) {
+      const oldAssignees = before.assignees.map((assignee) => assignee.id).sort().join(',');
+      const newAssignees = after.assignees.map((assignee) => assignee.id).sort().join(',');
+
+      if (oldAssignees !== newAssignees) {
+        await insertTaskEvent(client, {
+          taskId: params.taskId,
+          actorId: params.userId,
+          field: 'assignees',
+          oldValue: oldAssignees || null,
+          newValue: newAssignees || null
+        });
+      }
+    }
 
     for (const field of changedFields) {
       const oldValue = before[field] instanceof Date ? before[field]?.toISOString() : before[field];

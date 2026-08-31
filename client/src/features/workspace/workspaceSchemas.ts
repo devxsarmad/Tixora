@@ -23,7 +23,7 @@ export const taskFormSchema = z.object({
   description: z.string().trim().max(4000).optional(),
   dueAt: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']),
-  assigneeIds: z.array(z.string().uuid()).max(20).optional()
+  assigneeIds: z.array(z.string().uuid()).min(1, 'Assign at least one project member.').max(20)
 });
 
 export const taskEditFormSchema = taskFormSchema;

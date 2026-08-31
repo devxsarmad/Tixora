@@ -12,7 +12,7 @@ export const createTaskSchema = z.object({
   status: taskStatusSchema.optional(),
   priority: taskPrioritySchema.optional(),
   dueAt: z.string().datetime().nullable().optional(),
-  assigneeIds: z.array(z.string().uuid()).max(20).optional()
+  assigneeIds: z.array(z.string().uuid()).min(1, 'Assign at least one project member.').max(20)
 });
 
 export const updateTaskSchema = z
@@ -21,7 +21,8 @@ export const updateTaskSchema = z
     description: z.string().trim().max(4000).nullable().optional(),
     status: taskStatusSchema.optional(),
     priority: taskPrioritySchema.optional(),
-    dueAt: z.string().datetime().nullable().optional()
+    dueAt: z.string().datetime().nullable().optional(),
+    assigneeIds: z.array(z.string().uuid()).min(1, 'Assign at least one project member.').max(20).optional()
   })
   .refine(
     (value) =>
@@ -29,12 +30,13 @@ export const updateTaskSchema = z
       value.description !== undefined ||
       value.status !== undefined ||
       value.priority !== undefined ||
-      value.dueAt !== undefined,
+      value.dueAt !== undefined ||
+      value.assigneeIds !== undefined,
     { message: 'At least one field must be provided' }
   );
 
 export const replaceTaskAssigneesSchema = z.object({
-  assigneeIds: z.array(z.string().uuid()).max(20)
+  assigneeIds: z.array(z.string().uuid()).min(1, 'Assign at least one project member.').max(20)
 });
 
 export const projectIdParamSchema = z.object({

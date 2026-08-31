@@ -17,12 +17,12 @@ function invalidateTasks(queryClient: ReturnType<typeof useQueryClient>, project
 
 export function useCreateTask(token: string, projectId: string | null, filters: TaskFilters = {}) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (input: { title: string; description?: string; dueAt?: string | null; priority: TaskSummary['priority']; assigneeIds?: string[] }) => tasksApi.createTask(token, projectId ?? '', input), onSuccess: () => { invalidateTasks(queryClient, projectId); } });
+  return useMutation({ mutationFn: (input: { title: string; description?: string; dueAt?: string | null; priority: TaskSummary['priority']; assigneeIds: string[] }) => tasksApi.createTask(token, projectId ?? '', input), onSuccess: () => { invalidateTasks(queryClient, projectId); } });
 }
 
 export function useUpdateTask(token: string, projectId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (input: { taskId: string; values: Partial<Pick<TaskSummary, 'status' | 'priority' | 'title' | 'description' | 'dueAt'>> }) => tasksApi.updateTask(token, input.taskId, input.values), onSuccess: () => { invalidateTasks(queryClient, projectId); } });
+  return useMutation({ mutationFn: (input: { taskId: string; values: Partial<Pick<TaskSummary, 'status' | 'priority' | 'title' | 'description' | 'dueAt'>> & { assigneeIds?: string[] } }) => tasksApi.updateTask(token, input.taskId, input.values), onSuccess: () => { invalidateTasks(queryClient, projectId); } });
 }
 
 export function useReplaceTaskAssignees(token: string, projectId: string | null) {

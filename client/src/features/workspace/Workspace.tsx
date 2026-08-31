@@ -55,7 +55,6 @@ import {
 } from '../projects/hooks.js';
 import {
   useCreateTask,
-  useReplaceTaskAssignees,
   useTasks,
   useUpdateTask
 } from '../tasks/hooks.js';
@@ -226,10 +225,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     session.accessToken,
     selectedProjectId
   );
-  const replaceTaskAssigneesMutation = useReplaceTaskAssignees(
-    session.accessToken,
-    selectedProjectId
-  );
   const createCommentMutation = useCreateComment(
     session.accessToken,
     selectedTaskId
@@ -256,7 +251,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const isArchivingProject = archiveProjectMutation.isPending;
   const isCreatingTask = createTaskMutation.isPending;
   const isSavingTask = updateTaskMutation.isPending;
-  const isSavingAssignees = replaceTaskAssigneesMutation.isPending;
   const isCreatingComment = createCommentMutation.isPending;
   const isUpdatingComment = updateCommentMutation.isPending;
   const isDeletingComment = deleteCommentMutation.isPending;
@@ -667,7 +661,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           title: values.title,
           description: values.description || null,
           dueAt: toApiDateTime(values.dueAt),
-          priority: values.priority
+          priority: values.priority,
+          assigneeIds: values.assigneeIds
         }
       });
       setSelectedTaskId(response.task.id);
@@ -705,22 +700,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     handleColumnDrop
   } = useDragAndDrop(tasks, handleTaskStatusChange);
 
-  async function handleReplaceAssignees(assigneeIds: string[]) {
-    if (!selectedTaskId) return;
-
-    try {
-      setError(null);
-      const response = await replaceTaskAssigneesMutation.mutateAsync({
-        taskId: selectedTaskId,
-        assigneeIds
-      });
-      setSelectedTaskId(response.task.id);
-      showToast('Task assignees updated.');
-      setIsTaskDetailsOpen(false);
-    } catch (updateError) {
-      showError('Assignee update failed', updateError);
-    }
-  }
 
   async function handleCreateComment(values: CommentFormValues) {
     if (!selectedTaskId) {
@@ -1177,13 +1156,11 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         priorityLabels={priorityLabels}
         statusLabels={statusLabels}
         isSavingTask={isSavingTask}
-        isSavingAssignees={isSavingAssignees}
         isCreatingComment={isCreatingComment}
         isUpdatingComment={isUpdatingComment}
         isDeletingComment={isDeletingComment}
         onClose={closeTaskDetails}
         onUpdateTask={handleUpdateTask}
-        onReplaceAssignees={handleReplaceAssignees}
         onCreateComment={handleCreateComment}
         onUpdateComment={handleUpdateComment}
         onDeleteComment={handleDeleteComment}

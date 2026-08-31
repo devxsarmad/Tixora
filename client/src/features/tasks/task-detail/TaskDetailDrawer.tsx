@@ -31,13 +31,11 @@ type TaskDetailDrawerProps = {
   priorityLabels: Record<TaskSummary['priority'], string>;
   statusLabels: Record<TaskSummary['status'], string>;
   isSavingTask?: boolean;
-  isSavingAssignees?: boolean;
   isCreatingComment?: boolean;
   isUpdatingComment?: boolean;
   isDeletingComment?: boolean;
   onClose: () => void;
   onUpdateTask: (values: TaskEditFormValues) => Promise<void> | void;
-  onReplaceAssignees: (assigneeIds: string[]) => Promise<void> | void;
   onCreateComment: (values: CommentFormValues) => Promise<void> | void;
   onUpdateComment: (commentId: string, values: CommentFormValues) => Promise<void> | void;
   onDeleteComment: (commentId: string) => Promise<void> | void;
@@ -57,23 +55,20 @@ export function TaskDetailDrawer({
   priorityLabels,
   statusLabels,
   isSavingTask = false,
-  isSavingAssignees = false,
   isCreatingComment = false,
   isUpdatingComment = false,
   isDeletingComment = false,
   onClose,
   onUpdateTask,
-  onReplaceAssignees,
   onCreateComment,
   onUpdateComment,
   onDeleteComment,
   onManageProjectMembers,
   onAddOrganizationMember
 }: TaskDetailDrawerProps) {
-  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const taskEditForm = useForm<TaskEditFormValues>({
-    defaultValues: { title: '', description: '', dueAt: '', priority: 'medium' },
+    defaultValues: { title: '', description: '', dueAt: '', priority: 'medium', assigneeIds: [] },
     resolver: zodResolver(taskEditFormSchema)
   });
   const commentForm = useForm<CommentFormValues>({
@@ -90,9 +85,9 @@ export function TaskDetailDrawer({
       title: task?.title ?? '',
       description: task?.description ?? '',
       dueAt: toDateTimeInputValue(task?.dueAt ?? null),
-      priority: task?.priority ?? 'medium'
+      priority: task?.priority ?? 'medium',
+      assigneeIds: task?.assignees.map((user) => user.id) ?? []
     });
-    setSelectedAssigneeIds(task?.assignees.map((user) => user.id) ?? []);
   }, [task, taskEditForm]);
 
   if (!isOpen || !task) return null;
@@ -157,70 +152,61 @@ export function TaskDetailDrawer({
                 Due date
                 <input {...taskEditForm.register('dueAt')} type="datetime-local" />
               </label>
+              {projectDetail ? (
+                <section className="modal-panel task-assignees-panel">
+                  <div className="panel-title-row">
+                    <h3>Task assignees</h3>
+                    <span className="meta-text required-marker">Required</span>
+                  </div>
+                  <p className="meta-text">
+                    {workspaceMemberCount} organization members ·{' '}
+                    {projectMembers.length} project members available for tasks.
+                  </p>
+                  <p className="meta-text">Only project members can be assigned here.</p>
+                  <div className="check-list compact-checks">
+                    {projectMembers.length === 0 ? (
+                      <p className="meta-text">
+                        No project members yet. Add organization members to project access first.
+                      </p>
+                    ) : null}
+                    {projectMembers.map((member) => (
+                      <label key={member.id} className="check-row">
+                        <input
+                          type="checkbox"
+                          value={member.id}
+                          {...taskEditForm.register('assigneeIds')}
+                        />
+                        <span>{member.displayName}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {taskEditForm.formState.errors.assigneeIds ? (
+                    <span className="field-error">
+                      {taskEditForm.formState.errors.assigneeIds.message}
+                    </span>
+                  ) : null}
+                  <div className="assignee-helper-actions">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={onManageProjectMembers}
+                    >
+                      Manage project members
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={onAddOrganizationMember}
+                    >
+                      Add organization member
+                    </button>
+                  </div>
+                </section>
+              ) : null}
               <button type="submit" className="primary-button" disabled={isSavingTask}>
                 {isSavingTask ? 'Saving...' : 'Save task'}
               </button>
             </form>
-
-            {projectDetail ? (
-              <section className="modal-panel">
-                <div className="panel-title-row">
-                  <h3>Task assignees</h3>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => void onReplaceAssignees(selectedAssigneeIds)}
-                    disabled={isSavingAssignees}
-                  >
-                    {isSavingAssignees ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-                <p className="meta-text">
-                  {workspaceMemberCount} organization members ·{' '}
-                  {projectMembers.length} project members available for tasks.
-                </p>
-                <p className="meta-text">Only project members can be assigned here.</p>
-                <div className="check-list compact-checks">
-                  {projectMembers.length === 0 ? (
-                    <p className="meta-text">
-                      No project members yet. Add organization members to project access first.
-                    </p>
-                  ) : null}
-                  {projectMembers.map((member) => (
-                    <label key={member.id} className="check-row">
-                      <input
-                        type="checkbox"
-                        checked={selectedAssigneeIds.includes(member.id)}
-                        onChange={(event) =>
-                          setSelectedAssigneeIds((current) =>
-                            event.target.checked
-                              ? [...current, member.id]
-                              : current.filter((id) => id !== member.id)
-                          )
-                        }
-                      />
-                      <span>{member.displayName}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="assignee-helper-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={onManageProjectMembers}
-                  >
-                    Manage project members
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={onAddOrganizationMember}
-                  >
-                    Add organization member
-                  </button>
-                </div>
-              </section>
-            ) : null}
           </div>
 
           <section className="modal-column comments-section">

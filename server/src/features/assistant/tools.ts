@@ -23,7 +23,7 @@ const createTaskToolSchema = z.object({
   description: z.string().trim().max(4000).optional(),
   priority: taskPrioritySchema.optional(),
   dueAt: z.string().trim().min(1).nullable().optional(),
-  assigneeIds: z.array(z.string().trim().min(1)).max(20).optional()
+  assigneeIds: z.array(z.string().trim().min(1)).min(1, 'Assign at least one project member.').max(20)
 });
 
 const taskReferenceSchema = {
@@ -201,7 +201,7 @@ export const assistantToolDefinitions = [
     mutating: true,
     function: {
       name: 'create_task',
-      description: 'Create a task in a project. If assignees are named by the user, pass names/emails in assigneeIds so the server resolves them against project members.',
+      description: 'Create a task in a project. A task must have at least one assignee. If assignees are named by the user, pass names/emails in assigneeIds so the server resolves them against project members.',
       parameters: {
         type: 'object',
         properties: {
@@ -212,7 +212,7 @@ export const assistantToolDefinitions = [
           dueAt: { type: ['string', 'null'], description: 'Due date as ISO date-time when possible.' },
           assigneeIds: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Project member UUIDs, names, or emails.' }
         },
-        required: ['projectId', 'title'],
+        required: ['projectId', 'title', 'assigneeIds'],
         additionalProperties: false
       }
     }

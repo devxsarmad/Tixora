@@ -18,11 +18,11 @@ export function listTasks(token: string, projectId: string, filters: TaskFilters
   return apiRequest<{ tasks: TaskSummary[] }>('/api/projects/' + projectId + '/tasks' + (query ? '?' + query : ''), { headers: authHeaders(token) });
 }
 
-export function createTask(token: string, projectId: string, input: { title: string; description?: string; dueAt?: string | null; priority: TaskSummary['priority']; assigneeIds?: string[] }) {
+export function createTask(token: string, projectId: string, input: { title: string; description?: string; dueAt?: string | null; priority: TaskSummary['priority']; assigneeIds: string[] }) {
   return apiRequest<{ task: TaskSummary }>('/api/projects/' + projectId + '/tasks', { method: 'POST', headers: authHeaders(token), body: JSON.stringify(input) });
 }
 
-export function updateTask(token: string, taskId: string, input: Partial<Pick<TaskSummary, 'status' | 'priority' | 'title' | 'description' | 'dueAt'>>) {
+export function updateTask(token: string, taskId: string, input: Partial<Pick<TaskSummary, 'status' | 'priority' | 'title' | 'description' | 'dueAt'>> & { assigneeIds?: string[] }) {
   return apiRequest<{ task: TaskSummary }>('/api/tasks/' + taskId, { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify(input) });
 }
 

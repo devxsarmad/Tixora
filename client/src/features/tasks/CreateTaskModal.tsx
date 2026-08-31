@@ -125,7 +125,7 @@ export function CreateTaskModal({
           <section className="assignee-picker">
             <div className="panel-title-row">
               <h3>Assign to</h3>
-              <span className="meta-text">{projectMembers.length} available</span>
+              <span className="meta-text required-marker">Required · {projectMembers.length} available</span>
             </div>
             <p className="meta-text">
               Only project members can be assigned to this task.
@@ -157,6 +157,11 @@ export function CreateTaskModal({
                 No project members yet. Add organization members to this project first.
               </p>
             )}
+            {taskForm.formState.errors.assigneeIds ? (
+              <span className="field-error">
+                {taskForm.formState.errors.assigneeIds.message}
+              </span>
+            ) : null}
             <div className="assignee-helper-actions">
               <button
                 type="button"
