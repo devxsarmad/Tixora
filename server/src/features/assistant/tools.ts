@@ -15,9 +15,6 @@ const summarizeAssigneeWorkloadSchema = z.object({
   userId: z.string().uuid().optional(),
   userRef: z.string().trim().min(1).optional(),
   projectId: z.string().uuid().optional()
-}).refine((value) => Boolean(value.userId || value.userRef), {
-  message: 'Provide a userId or userRef',
-  path: ['userRef']
 });
 
 const createTaskToolSchema = z.object({
@@ -168,7 +165,7 @@ export const assistantToolDefinitions = [
     mutating: false,
     function: {
       name: 'summarize_assignee_workload',
-      description: 'Summarize workload for one organization/project member. If the user gives a name or email, pass it as userRef; do not invent a UUID.',
+      description: 'Summarize workload. If the user asks about each/every/all project member, call this with no userRef. If the user gives one name or email, pass it as userRef; do not invent a UUID.',
       parameters: {
         type: 'object',
         properties: {
@@ -660,6 +657,17 @@ async function listOverdueTasks(params: { userId: string; orgId: string; project
   }));
 }
 
+function extractSearchTerms(queryText: string) {
+  const stopWords = new Set(['find', 'show', 'search', 'ticket', 'tickets', 'task', 'tasks', 'related', 'to', 'or', 'and', 'the', 'a', 'an', 'bug', 'bugs']);
+  const terms = queryText
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2 && !stopWords.has(term));
+
+  return [...new Set(terms.length > 0 ? terms : [queryText.toLowerCase().trim()])];
+}
+
 async function searchTasks(params: {
   userId: string;
   orgId: string;
@@ -668,6 +676,7 @@ async function searchTasks(params: {
   status?: TaskSummary['status'];
   priority?: TaskSummary['priority'];
 }) {
+  const searchTerms = extractSearchTerms(params.queryText);
   const result = await query<ToolTaskRow>(
     `
       SELECT
@@ -699,13 +708,19 @@ async function searchTasks(params: {
         AND (tm.role IN ('owner', 'admin') OR pm.user_id IS NOT NULL)
         AND (
           lower(task.title) LIKE '%' || lower($4) || '%' OR
-          lower(coalesce(task.description, '')) LIKE '%' || lower($4) || '%'
+          lower(coalesce(task.description, '')) LIKE '%' || lower($4) || '%' OR
+          EXISTS (
+            SELECT 1
+            FROM unnest($7::text[]) AS search_term
+            WHERE lower(task.title) LIKE '%' || search_term || '%'
+               OR lower(coalesce(task.description, '')) LIKE '%' || search_term || '%'
+          )
         )
       GROUP BY task.id, p.name
       ORDER BY task.updated_at DESC
       LIMIT 12
     `,
-    [params.orgId, params.userId, params.projectId ?? null, params.queryText, params.status ?? null, params.priority ?? null]
+    [params.orgId, params.userId, params.projectId ?? null, params.queryText, params.status ?? null, params.priority ?? null, searchTerms]
   );
 
   return result.rows.map((task) => ({
@@ -717,6 +732,67 @@ async function searchTasks(params: {
     priority: task.priority,
     dueAt: task.due_at,
     assigneeCount: task.assignee_count
+  }));
+}
+
+async function summarizeProjectMemberWorkloads(params: {
+  userId: string;
+  orgId: string;
+  projectId?: string;
+}) {
+  const result = await query<WorkloadRow>(
+    `
+      SELECT
+        assignee.id AS user_id,
+        assignee.display_name,
+        assignee.email,
+        p.id AS project_id,
+        p.name AS project_name,
+        COUNT(task.id) FILTER (WHERE task.status = 'todo')::int AS todo_count,
+        COUNT(task.id) FILTER (WHERE task.status = 'in_progress')::int AS in_progress_count,
+        COUNT(task.id) FILTER (WHERE task.status = 'blocked')::int AS blocked_count,
+        COUNT(task.id) FILTER (WHERE task.status = 'done')::int AS done_count,
+        COUNT(task.id) FILTER (WHERE task.due_at < now() AND task.status <> 'done')::int AS overdue_count
+      FROM project_members AS target_project
+      JOIN users AS assignee
+        ON assignee.id = target_project.user_id
+      JOIN projects AS p
+        ON p.id = target_project.project_id
+      JOIN team_members AS requester_team
+        ON requester_team.team_id = p.team_id
+       AND requester_team.user_id = $2
+      LEFT JOIN project_members AS requester_project
+        ON requester_project.project_id = p.id
+       AND requester_project.user_id = $2
+      LEFT JOIN task_assignees AS ta
+        ON ta.user_id = assignee.id
+      LEFT JOIN tasks AS task
+        ON task.id = ta.task_id
+       AND task.project_id = p.id
+       AND task.deleted_at IS NULL
+      WHERE p.team_id = $1
+        AND ($3::uuid IS NULL OR p.id = $3)
+        AND p.deleted_at IS NULL
+        AND (requester_team.role IN ('owner', 'admin') OR requester_project.user_id IS NOT NULL)
+      GROUP BY assignee.id, assignee.display_name, assignee.email, p.id, p.name
+      ORDER BY p.name ASC, assignee.display_name ASC
+    `,
+    [params.orgId, params.userId, params.projectId ?? null]
+  );
+
+  return result.rows.map((row) => ({
+    userId: row.user_id,
+    displayName: row.display_name,
+    email: row.email,
+    projectId: row.project_id,
+    projectName: row.project_name,
+    counts: {
+      todo: row.todo_count,
+      inProgress: row.in_progress_count,
+      blocked: row.blocked_count,
+      done: row.done_count,
+      overdue: row.overdue_count
+    }
   }));
 }
 
@@ -818,6 +894,20 @@ export async function executeAssistantToolCall(params: {
 
     if (params.call.name === 'summarize_assignee_workload') {
       const args = parseToolArguments(params.call.argumentsText, summarizeAssigneeWorkloadSchema);
+
+      if (!args.userId && !args.userRef) {
+        return {
+          toolCallId: params.call.id,
+          toolName: params.call.name,
+          ok: true,
+          result: await summarizeProjectMemberWorkloads({
+            userId: params.userId,
+            orgId: params.orgId,
+            projectId: args.projectId
+          })
+        };
+      }
+
       const targetUserId = await resolveWorkloadUserId({
         orgId: params.orgId,
         userId: args.userId,

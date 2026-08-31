@@ -97,11 +97,30 @@ const statusLabels: Record<TaskSummary['status'], string> = {
   blocked: 'Blocked',
   done: 'Done'
 };
+const workspaceViews: WorkspaceView[] = ['board', 'my-tasks', 'calendar', 'activity', 'ask'];
+
+function parseWorkspacePath(pathname: string): WorkspaceView {
+  const view = pathname.replace(/^\//, '') || 'board';
+  return workspaceViews.includes(view as WorkspaceView) ? (view as WorkspaceView) : 'board';
+}
+
+function buildWorkspacePath(view: WorkspaceView) {
+  return '/' + view;
+}
+
+function updateBrowserPath(pathname: string, replace = false) {
+  if (window.location.pathname === pathname) return;
+  window.history[replace ? 'replaceState' : 'pushState']({}, '', pathname);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
+  const initialView = parseWorkspacePath(window.location.pathname);
+  const [routePath, setRoutePath] = useState(() => window.location.pathname);
   const [selectedTeamSlug, setSelectedTeamSlug] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<WorkspaceView>('board');
+  const [activeView, setActiveView] = useState<WorkspaceView>(initialView);
   const [includeArchivedProjects, setIncludeArchivedProjects] = useState(false);
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -323,6 +342,26 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
+  useEffect(() => {
+    function handlePopState() {
+      setRoutePath(window.location.pathname);
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    const routeView = parseWorkspacePath(routePath);
+    setActiveView(routeView);
+  }, [routePath]);
+
+  function navigateWorkspace(view: WorkspaceView, replace = false) {
+    const nextPath = buildWorkspacePath(view);
+    updateBrowserPath(nextPath, replace);
+    setRoutePath(nextPath);
+  }
+
 
   useEffect(() => {
     if (organizationsQuery.isLoading) return;
@@ -333,7 +372,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     }
 
     if (selectedTeamSlug && !teams.some((team) => team.slug === selectedTeamSlug)) {
-      setSelectedTeamSlug(teams[0]?.slug ?? null);
+      const nextTeamSlug = teams[0]?.slug ?? null;
+      setSelectedTeamSlug(nextTeamSlug);
       setSelectedProjectId(null);
       setSelectedTaskId(null);
     }
@@ -347,11 +387,12 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
 
     if (projectsQuery.isLoading) return;
 
-    setSelectedProjectId((currentProjectId) =>
-      projects.some((project) => project.id === currentProjectId)
-        ? currentProjectId
-        : projects[0]?.id ?? null
-    );
+    setSelectedProjectId((currentProjectId) => {
+      if (projects.some((project) => project.id === currentProjectId)) return currentProjectId;
+
+      const nextProjectId = projects[0]?.id ?? null;
+      return nextProjectId;
+    });
   }, [projects, projectsQuery.isLoading, selectedTeamSlug]);
 
   useEffect(() => {
@@ -363,9 +404,12 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   useEffect(() => {
     if (!selectedProjectId || tasksQuery.isLoading) return;
 
-    setSelectedTaskId((currentTaskId) =>
-      tasks.some((task) => task.id === currentTaskId) ? currentTaskId : null
-    );
+    setSelectedTaskId((currentTaskId) => {
+      if (!currentTaskId || tasks.some((task) => task.id === currentTaskId)) return currentTaskId;
+
+      setIsTaskDetailsOpen(false);
+      return null;
+    });
   }, [selectedProjectId, tasks, tasksQuery.isLoading]);
 
 
@@ -392,6 +436,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setError(null);
       const response = await createOrganizationMutation.mutateAsync({ name });
       setSelectedTeamSlug(response.team.slug);
+      navigateWorkspace('board');
       setIsProjectFormOpen(false);
       showToast('Organization created.');
       setWorkspaceName('');
@@ -414,6 +459,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       });
       setSelectedProjectId(response.project.id);
       setSelectedTaskId(null);
+      navigateWorkspace('board');
       projectForm.reset();
       setIsProjectFormOpen(false);
       showToast('Project created.');
@@ -600,6 +646,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       });
       resetTaskFilters();
       setSelectedTaskId(response.task.id);
+      navigateWorkspace('board');
       setIsTaskFormOpen(false);
       setIsSetupComplete(true);
       showToast('Task created.');
@@ -726,11 +773,15 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     setIsTaskDetailsOpen(true);
   }
 
+  function navigateTaskDetails(taskId: string) {
+    setSelectedTaskId(taskId);
+  }
+
   useTaskKeyboardNav(
     isTaskDetailsOpen,
     tasks,
     selectedTaskId,
-    setSelectedTaskId,
+    navigateTaskDetails,
     closeTaskDetails
   );
 
@@ -768,12 +819,18 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         onToggleOrgSwitcher={() => setIsOrgSwitcherOpen((current) => !current)}
         onSelectOrganization={(slug) => {
           setSelectedTeamSlug(slug);
+          setSelectedProjectId(null);
           setSelectedTaskId(null);
+          setActiveView('board');
+          navigateWorkspace('board');
           setIsOrgSwitcherOpen(false);
         }}
         onCreateOrganization={() => {
           setWorkspaceName('');
           setSelectedTeamSlug(null);
+          setSelectedProjectId(null);
+          setSelectedTaskId(null);
+          navigateWorkspace('board');
           setIsOrgSwitcherOpen(false);
         }}
         onToggleProjectForm={() => setIsProjectFormOpen((current) => !current)}
@@ -782,10 +839,12 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           setSelectedProjectId(projectId);
           setSelectedTaskId(null);
           setActiveView('board');
+          navigateWorkspace('board');
         }}
         onSelectView={(view) => {
           setActiveView(view);
           setSelectedTaskId(null);
+          navigateWorkspace(view);
         }}
         onOpenOrganizationMembers={() => setIsTeamMembersOpen(true)}
         onOpenProjectMembers={openProjectMembersSettings}

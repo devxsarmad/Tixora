@@ -95,6 +95,26 @@ function isAssistantToolName(value: string): value is ToolName {
   return assistantToolNames.includes(value as ToolName);
 }
 
+function getCurrentDateContext() {
+  return 'Current date: ' + new Date().toISOString().slice(0, 10) + '. Interpret relative dates like tomorrow from this date.';
+}
+
+function withDefaultProjectId(call: AssistantToolCall, projectId?: string): AssistantToolCall {
+  if (!projectId) return call;
+
+  try {
+    const args = call.argumentsText ? JSON.parse(call.argumentsText) as Record<string, unknown> : {};
+    if (args.projectId) return call;
+
+    return {
+      ...call,
+      argumentsText: JSON.stringify({ ...args, projectId })
+    };
+  } catch {
+    return call;
+  }
+}
+
 function buildToolContext(toolResults: AssistantToolResult[]) {
   if (toolResults.length === 0) return '';
 
@@ -216,40 +236,57 @@ function buildToolSuccessAnswer(toolResults: AssistantToolResult[]) {
   const workloadResult = toolResults.find((result) => result.ok && result.toolName === 'summarize_assignee_workload');
   if (workloadResult && Array.isArray(workloadResult.result)) {
     const rows = workloadResult.result as Array<{
+      userId?: string;
       displayName?: string;
       projectName?: string;
       counts?: { todo?: number; inProgress?: number; blocked?: number; done?: number; overdue?: number };
     }>;
-    if (rows.length === 0) return 'I found no assigned tickets for that member in this scope.';
+    if (rows.length === 0) return 'I found no project members or assigned tickets in this scope.';
 
-    const totals = rows.reduce(
-      (current, row) => ({
-        todo: current.todo + (row.counts?.todo ?? 0),
-        inProgress: current.inProgress + (row.counts?.inProgress ?? 0),
-        blocked: current.blocked + (row.counts?.blocked ?? 0),
-        done: current.done + (row.counts?.done ?? 0),
-        overdue: current.overdue + (row.counts?.overdue ?? 0)
-      }),
-      { todo: 0, inProgress: 0, blocked: 0, done: 0, overdue: 0 }
-    );
-    const total = totals.todo + totals.inProgress + totals.blocked + totals.done;
-    const name = rows[0].displayName ?? 'That member';
-    return (
-      name + ' has ' + total + ' assigned ticket' + (total === 1 ? '' : 's') +
-      ': ' + totals.todo + ' to do, ' +
-      totals.inProgress + ' in progress, ' +
-      totals.blocked + ' blocked, ' +
-      totals.done + ' done, and ' +
-      totals.overdue + ' overdue.'
-    );
+    const groupedRows = new Map<string, {
+      name: string;
+      counts: { todo: number; inProgress: number; blocked: number; done: number; overdue: number };
+    }>();
+
+    for (const row of rows) {
+      const key = row.userId ?? row.displayName ?? 'unknown';
+      const current = groupedRows.get(key) ?? {
+        name: row.displayName ?? 'Unnamed member',
+        counts: { todo: 0, inProgress: 0, blocked: 0, done: 0, overdue: 0 }
+      };
+      current.counts.todo += row.counts?.todo ?? 0;
+      current.counts.inProgress += row.counts?.inProgress ?? 0;
+      current.counts.blocked += row.counts?.blocked ?? 0;
+      current.counts.done += row.counts?.done ?? 0;
+      current.counts.overdue += row.counts?.overdue ?? 0;
+      groupedRows.set(key, current);
+    }
+
+    const summaries = [...groupedRows.values()].map((row) => {
+      const total = row.counts.todo + row.counts.inProgress + row.counts.blocked + row.counts.done;
+      return (
+        row.name + ': ' + total + ' ticket' + (total === 1 ? '' : 's') +
+        ' (' + row.counts.todo + ' to do, ' +
+        row.counts.inProgress + ' in progress, ' +
+        row.counts.blocked + ' blocked, ' +
+        row.counts.done + ' done, ' +
+        row.counts.overdue + ' overdue)'
+      );
+    });
+
+    if (summaries.length === 1) return summaries[0] + '.';
+    return 'Workload by project member: ' + summaries.join('; ') + '.';
   }
 
   const overdueResult = toolResults.find((result) => result.ok && result.toolName === 'list_overdue_tasks');
   if (overdueResult && Array.isArray(overdueResult.result)) {
-    const tasks = overdueResult.result as Array<{ title?: string }>;
-    if (tasks.length === 0) return 'No overdue tickets found in this scope.';
-    const titles = tasks.slice(0, 6).map((task) => task.title).filter(Boolean).join(', ');
-    return 'I found ' + tasks.length + ' overdue ticket' + (tasks.length === 1 ? '' : 's') + ': ' + titles + (tasks.length > 6 ? ', and more.' : '.');
+    const tasks = overdueResult.result as Array<{ title?: string; status?: string; dueAt?: string | null }>;
+    if (tasks.length === 0) return 'No overdue open tickets found in this scope.';
+    const labels = tasks.slice(0, 6).map((task) => {
+      const due = task.dueAt ? new Date(task.dueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'no due date';
+      return (task.title ?? 'Untitled ticket') + ' (' + (task.status ?? 'unknown') + ', due ' + due + ')';
+    }).join('; ');
+    return 'I found ' + tasks.length + ' overdue open ticket' + (tasks.length === 1 ? '' : 's') + ': ' + labels + (tasks.length > 6 ? '; and more.' : '.');
   }
 
   return null;
@@ -330,6 +367,7 @@ export async function askAssistant(params: {
   }
 
   const context = [
+    getCurrentDateContext(),
     params.input.projectId ? 'Current project ID: ' + params.input.projectId : '',
     buildContext(chunks)
   ].filter(Boolean).join('\n\n');
@@ -350,9 +388,11 @@ export async function askAssistant(params: {
     return [
       ...current,
       {
-        id: call.id,
-        name: call.name,
-        argumentsText: call.argumentsText
+        ...withDefaultProjectId({
+          id: call.id,
+          name: call.name,
+          argumentsText: call.argumentsText
+        }, params.input.projectId)
       }
     ];
   }, []);

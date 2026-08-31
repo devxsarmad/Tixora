@@ -12,13 +12,24 @@ import { Workspace } from './features/workspace/Workspace.js';
 type AuthMode = 'login' | 'register';
 type AuthEntryPoint = 'login' | 'register' | 'restored';
 
+function getInitialAuthMode(pathname: string): AuthMode {
+  return pathname === '/register' ? 'register' : 'login';
+}
+
+function navigateTo(pathname: string, replace = false) {
+  if (window.location.pathname === pathname) return;
+  window.history[replace ? 'replaceState' : 'pushState']({}, '', pathname);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 export function App() {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthResponse | null>(() => loadSession());
-  const [mode, setMode] = useState<AuthMode>('login');
+  const [mode, setMode] = useState<AuthMode>(() => getInitialAuthMode(window.location.pathname));
   const [authEntryPoint, setAuthEntryPoint] = useState<AuthEntryPoint>('restored');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   async function handleAuth(
     action: () => Promise<AuthResponse>,
     entryPoint: AuthEntryPoint
@@ -33,6 +44,7 @@ export function App() {
       saveSession(nextSession);
       setAuthEntryPoint(entryPoint);
       setSession(nextSession);
+      navigateTo(entryPoint === 'register' ? '/setup' : '/board', true);
     } catch (authError) {
       setError(
         authError instanceof Error ? authError.message : 'Authentication failed'
@@ -50,11 +62,23 @@ export function App() {
     setMode('login');
     setAuthEntryPoint('restored');
     setError(message ?? null);
+    navigateTo('/login', true);
   }
 
   function handleLogout() {
     endSession();
   }
+
+  useEffect(() => {
+    function handlePopState() {
+      if (!loadSession()) {
+        setMode(getInitialAuthMode(window.location.pathname));
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     function handleAuthExpired() {
@@ -64,6 +88,21 @@ export function App() {
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
   }, [queryClient]);
+
+  useEffect(() => {
+    if (session) return;
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+      navigateTo('/login', true);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    const authOrLegacyRoute = ['/login', '/register', '/workspace', '/'];
+    if (authOrLegacyRoute.includes(window.location.pathname)) {
+      navigateTo('/board', true);
+    }
+  }, [session]);
 
   if (session) {
     return (
@@ -99,6 +138,7 @@ export function App() {
             onClick={() => {
               setMode('login');
               setError(null);
+              navigateTo('/login');
             }}
           >
             Login
@@ -109,6 +149,7 @@ export function App() {
             onClick={() => {
               setMode('register');
               setError(null);
+              navigateTo('/register');
             }}
           >
             Register
