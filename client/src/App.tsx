@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { AUTH_EXPIRED_EVENT } from './api/http.js';
 import tixoraLogo from './assests/tixora-logo.jpeg';
 import { login, register } from './features/auth/authApi.js';
 import { LoginPage } from './features/auth/pages/LoginPage.js';
@@ -41,14 +42,28 @@ export function App() {
     }
   }
 
-  function handleLogout() {
+  function endSession(message?: string) {
     clearSession();
     void queryClient.cancelQueries();
     queryClient.clear();
     setSession(null);
     setMode('login');
     setAuthEntryPoint('restored');
+    setError(message ?? null);
   }
+
+  function handleLogout() {
+    endSession();
+  }
+
+  useEffect(() => {
+    function handleAuthExpired() {
+      endSession('Your session expired. Please log in again.');
+    }
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+  }, [queryClient]);
 
   if (session) {
     return (

@@ -1,0 +1,26 @@
+{
+  "name": "tixora-ai",
+  "version": "1.0.0",
+  "description": "Tixora-AI is a full-stack AI project management platform built with the PERN stack. It combines a Jira-style workspace for organizations, projects, tickets, comments, permissions, and activity tracking with an agentic assistant called Ask Tixora that can understand workspace context and help users inspect or act on project work.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devxsarmad/Tixora.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/devxsarmad/Tixora/issues"
+  },
+  "homepage": "https://github.com/devxsarmad/Tixora#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.4.0"
+  }
+}

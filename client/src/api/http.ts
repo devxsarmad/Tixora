@@ -4,12 +4,34 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
+export const AUTH_EXPIRED_EVENT = 'tixora:auth-expired';
+
 type ApiErrorBody = {
   error?: {
+    code?: string;
     message?: string;
     fields?: Record<string, string[] | undefined>;
   };
 };
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, params: { status: number; code?: string }) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = params.status;
+    this.code = params.code;
+  }
+}
+
+function notifyAuthExpired(errorBody: ApiErrorBody | null, response: Response) {
+  const code = errorBody?.error?.code;
+  if (response.status === 401 && (code === 'INVALID_TOKEN' || code === 'AUTH_REQUIRED')) {
+    window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+  }
+}
 
 export async function apiRequest<T>(
   path: string,
@@ -31,11 +53,17 @@ export async function apiRequest<T>(
   const data = text ? (JSON.parse(text) as T & ApiErrorBody) : null;
 
   if (!response.ok) {
-    const firstFieldError = data?.error?.fields
-      ? Object.values(data.error.fields).flat().find(Boolean)
+    const errorBody = data as ApiErrorBody | null;
+    notifyAuthExpired(errorBody, response);
+
+    const firstFieldError = errorBody?.error?.fields
+      ? Object.values(errorBody.error.fields).flat().find(Boolean)
       : null;
 
-    throw new Error(firstFieldError ?? data?.error?.message ?? 'API request failed');
+    throw new ApiError(firstFieldError ?? errorBody?.error?.message ?? 'API request failed', {
+      status: response.status,
+      code: errorBody?.error?.code
+    });
   }
 
   return data as T;
