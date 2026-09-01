@@ -486,7 +486,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       showToast(emails.length === 1 ? 'Organization member added.' : emails.length + ' organization members added.');
       setIsTeamMembersOpen(false);
     } catch (memberError) {
-      showError('Organization user update failed', memberError);
+      showError('Organization member update failed', memberError);
     }
   }
 
@@ -518,7 +518,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       showToast('Organization role updated.');
       setIsTeamMembersOpen(false);
     } catch (memberError) {
-      showError('Organization user role update failed', memberError);
+      showError('Organization member role update failed', memberError);
     }
   }
 
@@ -531,7 +531,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       showToast('Organization member removed.');
       setIsTeamMembersOpen(false);
     } catch (memberError) {
-      showError('Organization user remove failed', memberError);
+      showError('Organization member remove failed', memberError);
     }
   }
 
@@ -540,7 +540,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     role: ProjectMember['role']
   ) {
     if (!selectedProjectId || userIds.length === 0) {
-      setError('Select at least one organization user to add to the project.');
+      setError('Select at least one organization member to add to the project.');
       return;
     }
 

@@ -86,6 +86,8 @@ export function ProjectSettingsModal({
     );
   }, [projectMemberSearch, projectMembers, workspaceMembers]);
 
+  const hasProjectMemberSelection = selectedProjectMemberUserIds.length > 0;
+
   function dismissProjectMemberHint() {
     localStorage.setItem('tixora.projectMemberHintDismissed', 'true');
     setIsProjectMemberHintDismissed(true);
@@ -171,7 +173,7 @@ export function ProjectSettingsModal({
               <h3>Project members</h3>
               <span className="meta-text">{projectMembers.length}</span>
             </div>
-            <p className="meta-text">Project members can open this board and be assigned to tasks.</p>
+            <p className="meta-text">Project members are selected from organization members. They can open this board and be assigned to tasks.</p>
             <form
               className="member-form compact"
               onSubmit={async (event) => {
@@ -190,7 +192,10 @@ export function ProjectSettingsModal({
               />
               <div className="search-result-list">
                 {filteredProjectAccessCandidates.length === 0 ? (
-                  <p className="meta-text">No organization members to add.</p>
+                  <p className="meta-text">No organization members available to add.</p>
+                ) : null}
+                {hasProjectMemberSelection ? (
+                  <p className="meta-text state-note">{selectedProjectMemberUserIds.length} selected for project access.</p>
                 ) : null}
                 {filteredProjectAccessCandidates.slice(0, 8).map((member) => (
                   <label
@@ -222,6 +227,7 @@ export function ProjectSettingsModal({
               </div>
               <select
                 value={projectMemberRole}
+                disabled={!hasProjectMemberSelection || isSavingMembers}
                 onChange={(event) =>
                   setProjectMemberRole(event.target.value as ProjectMember['role'])
                 }
@@ -230,13 +236,16 @@ export function ProjectSettingsModal({
                 <option value="manager">Manager</option>
                 <option value="viewer">Viewer</option>
               </select>
-              <button type="submit" className="primary-button" disabled={isSavingMembers}>
+              <button type="submit" className="primary-button" disabled={isSavingMembers || !hasProjectMemberSelection}>
                 {isSavingMembers ? 'Adding...' : selectedProjectMemberUserIds.length > 0
                   ? 'Add ' + selectedProjectMemberUserIds.length + ' members to project'
                   : 'Add to project'}
               </button>
             </form>
             <div className="member-list compact">
+              {projectMembers.length === 0 ? (
+                <p className="meta-text">No project members yet. Add organization members above to give board access.</p>
+              ) : null}
               {projectMembers.map((member) => (
                 <article key={member.id} className="member-row modal-member-row">
                   <span className="avatar">{getInitials(member.displayName)}</span>

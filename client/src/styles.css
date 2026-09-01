@@ -2103,6 +2103,17 @@ label {
   font-size: 12px;
 }
 
+.state-note {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  font-size: 12px;
+}
+
 .manual-email-fallback {
   display: grid;
   gap: 10px;

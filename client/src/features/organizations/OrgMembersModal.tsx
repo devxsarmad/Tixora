@@ -85,11 +85,15 @@ export function OrgMembersModal({
     [invitations]
   );
   const inviteCandidateEmail = userDirectorySearch.trim().toLowerCase();
+  const alreadyMemberTypedEmail = members.some((member) => member.email.toLowerCase() === inviteCandidateEmail);
+  const alreadyInvitedTypedEmail = invitedInvitations.some((invitation) => invitation.email.toLowerCase() === inviteCandidateEmail);
+  const hasManualEmail = Boolean(teamMemberEmail.trim());
   const canInviteTypedEmail =
     isValidEmail(inviteCandidateEmail) &&
     availableDirectoryUsers.length === 0 &&
-    !members.some((member) => member.email.toLowerCase() === inviteCandidateEmail) &&
-    !invitedInvitations.some((invitation) => invitation.email.toLowerCase() === inviteCandidateEmail);
+    !alreadyMemberTypedEmail &&
+    !alreadyInvitedTypedEmail;
+  const canSubmit = selectedDirectoryUserIds.length > 0 || canInviteTypedEmail || hasManualEmail;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -158,9 +162,17 @@ export function OrgMembersModal({
               {!userDirectorySearch.trim() ? (
                 <p className="meta-text">Type a name or email to find registered members.</p>
               ) : null}
+              {alreadyMemberTypedEmail ? (
+                <p className="meta-text state-note">Already an organization member.</p>
+              ) : null}
+              {alreadyInvitedTypedEmail ? (
+                <p className="meta-text state-note">Already invited. They will appear here after accepting.</p>
+              ) : null}
               {userDirectorySearch.trim() &&
               availableDirectoryUsers.length === 0 &&
-              !canInviteTypedEmail ? (
+              !canInviteTypedEmail &&
+              !alreadyMemberTypedEmail &&
+              !alreadyInvitedTypedEmail ? (
                 <p className="meta-text">No matching registered members found.</p>
               ) : null}
               {canInviteTypedEmail ? (
@@ -216,7 +228,7 @@ export function OrgMembersModal({
               </label>
             </details>
             <label>
-              Organization role
+              Add as organization role
               <select
                 value={teamMemberRole}
                 onChange={(event) => setTeamMemberRole(event.target.value as OrgRole)}
@@ -225,7 +237,7 @@ export function OrgMembersModal({
                 <option value="admin">Admin</option>
               </select>
             </label>
-            <button type="submit" className="primary-button" disabled={isSaving}>
+            <button type="submit" className="primary-button" disabled={isSaving || !canSubmit}>
               {isSaving ? 'Saving...' : selectedDirectoryUserIds.length > 0
                 ? 'Add ' + selectedDirectoryUserIds.length + ' members'
                 : teamMemberEmail || canInviteTypedEmail
