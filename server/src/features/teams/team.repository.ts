@@ -335,7 +335,7 @@ export async function removeTeamMemberForUser(params: {
   slug: string;
   actorId: string;
   targetUserId: string;
-}): Promise<{ id: string } | null | 'forbidden'> {
+}): Promise<{ id: string } | null | 'forbidden' | 'owner_transfer_required'> {
   return withTransaction(async (client) => {
     const access = await findTeamAccess(client, {
       slug: params.slug,
@@ -345,12 +345,24 @@ export async function removeTeamMemberForUser(params: {
     if (!access) return null;
     if (access.role !== 'owner' && access.role !== 'admin') return 'forbidden';
 
+    const targetMember = await client.query<{ role: 'owner' | 'admin' | 'member' }>(
+      `
+        SELECT role
+        FROM team_members
+        WHERE team_id = $1
+          AND user_id = $2
+      `,
+      [access.team_id, params.targetUserId]
+    );
+
+    if (!targetMember.rows[0]) return null;
+    if (targetMember.rows[0].role === 'owner') return 'owner_transfer_required';
+
     const result = await client.query<{ id: string }>(
       `
         DELETE FROM team_members
         WHERE team_id = $1
           AND user_id = $2
-          AND role <> 'owner'
           AND ($3::team_role = 'owner' OR role = 'member')
         RETURNING user_id AS id
       `,

@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS enforce_task_assignee_project_membership_before_write ON task_assignees;
+DROP FUNCTION IF EXISTS enforce_task_assignee_project_membership();

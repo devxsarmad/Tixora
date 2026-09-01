@@ -139,7 +139,7 @@ function handleProjectMemberResult<T>(
   if (result === 'not_team_member') {
     throw new HttpError(
       400,
-      'User must be a team member before joining the project',
+      'User must be an organization member before joining the project',
       'PROJECT_MEMBER_NOT_IN_TEAM'
     );
   }

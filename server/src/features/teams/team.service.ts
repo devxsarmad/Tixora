@@ -86,7 +86,7 @@ export async function getMyTeamBySlug(slug: string, userId: string) {
 }
 
 function handleMemberResult<T>(
-  result: T | null | 'forbidden' | 'user_not_found'
+  result: T | null | 'forbidden' | 'user_not_found' | 'owner_transfer_required'
 ): T {
   if (result === 'forbidden') {
     throw new HttpError(403, 'Organization permission denied', 'TEAM_FORBIDDEN');
@@ -94,6 +94,14 @@ function handleMemberResult<T>(
 
   if (result === 'user_not_found') {
     throw new HttpError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  if (result === 'owner_transfer_required') {
+    throw new HttpError(
+      409,
+      'Transfer organization ownership before removing an owner',
+      'ORGANIZATION_OWNER_TRANSFER_REQUIRED'
+    );
   }
 
   if (!result) {
