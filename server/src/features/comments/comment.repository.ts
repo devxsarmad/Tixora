@@ -334,6 +334,10 @@ export async function softDeleteCommentForUser(params: {
       return null;
     }
 
+    if (access.archived_at) {
+      return 'forbidden';
+    }
+
     if (
       !canDeleteComment({
         userId: params.userId,

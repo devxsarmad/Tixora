@@ -117,7 +117,7 @@ export async function listTeamsForUser(userId: string): Promise<TeamSummary[]> {
         t.slug,
         requester.role,
         COUNT(DISTINCT all_members.user_id)::int AS member_count,
-        COUNT(DISTINCT p.id) FILTER (WHERE p.archived_at IS NULL)::int AS active_project_count,
+        COUNT(DISTINCT p.id) FILTER (WHERE p.archived_at IS NULL AND p.deleted_at IS NULL)::int AS active_project_count,
         t.created_at,
         t.updated_at
       FROM team_members AS requester
@@ -170,7 +170,7 @@ export async function findTeamDetailForUser(params: {
         selected_team.slug,
         selected_team.role,
         COUNT(DISTINCT all_members.user_id)::int AS member_count,
-        COUNT(DISTINCT p.id) FILTER (WHERE p.archived_at IS NULL)::int AS active_project_count,
+        COUNT(DISTINCT p.id) FILTER (WHERE p.archived_at IS NULL AND p.deleted_at IS NULL)::int AS active_project_count,
         selected_team.created_at,
         selected_team.updated_at,
         COALESCE(

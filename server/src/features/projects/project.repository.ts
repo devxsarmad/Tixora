@@ -62,6 +62,7 @@ type ProjectAccessRow = {
   team_id?: string;
   team_role: TeamRole;
   project_role: ProjectRole | null;
+  archived_at: Date | null;
 };
 
 type ProjectMemberRow = {
@@ -389,7 +390,8 @@ async function findProjectAccessForUser(
         p.id AS project_id,
         p.team_id,
         tm.role AS team_role,
-        pm.role AS project_role
+        pm.role AS project_role,
+        p.archived_at
       FROM projects AS p
       JOIN team_members AS tm
         ON tm.team_id = p.team_id
@@ -422,7 +424,7 @@ export async function upsertProjectMemberForUser(params: {
   actorId: string;
   targetUserId: string;
   role: ProjectRole;
-}): Promise<ProjectDetail['members'][number] | null | 'forbidden' | 'not_team_member'> {
+}): Promise<ProjectDetail['members'][number] | null | 'forbidden' | 'archived' | 'not_team_member'> {
   return withTransaction(async (client) => {
     const access = await findProjectAccessForUser(client, {
       projectId: params.projectId,
@@ -430,6 +432,7 @@ export async function upsertProjectMemberForUser(params: {
     });
 
     if (!access) return null;
+    if (access.archived_at) return 'archived';
     if (!canManageProject(access)) return 'forbidden';
 
     const teamMember = await client.query<{ exists: boolean }>(
@@ -470,7 +473,7 @@ export async function removeProjectMemberForUser(params: {
   projectId: string;
   actorId: string;
   targetUserId: string;
-}): Promise<{ id: string } | null | 'forbidden'> {
+}): Promise<{ id: string } | null | 'forbidden' | 'archived' | 'self_manager_removal_blocked'> {
   return withTransaction(async (client) => {
     const access = await findProjectAccessForUser(client, {
       projectId: params.projectId,
@@ -478,20 +481,33 @@ export async function removeProjectMemberForUser(params: {
     });
 
     if (!access) return null;
+    if (access.archived_at) return 'archived';
     if (!canManageProject(access)) return 'forbidden';
+
+    const targetMember = await client.query<{ role: ProjectRole }>(
+      `
+        SELECT role
+        FROM project_members
+        WHERE project_id = $1
+          AND user_id = $2
+        LIMIT 1
+      `,
+      [params.projectId, params.targetUserId]
+    );
+
+    if (!targetMember.rows[0]) return null;
+    if (params.targetUserId === params.actorId && targetMember.rows[0].role === 'manager') {
+      return 'self_manager_removal_blocked';
+    }
 
     const result = await client.query<{ id: string }>(
       `
         DELETE FROM project_members
         WHERE project_id = $1
           AND user_id = $2
-          AND NOT (
-            user_id = $3
-            AND role = 'manager'
-          )
         RETURNING user_id AS id
       `,
-      [params.projectId, params.targetUserId, params.actorId]
+      [params.projectId, params.targetUserId]
     );
 
     return result.rows[0] ?? null;
@@ -509,6 +525,10 @@ export async function updateProjectForUser(params: {
 
     if (!access) {
       return null;
+    }
+
+    if (access.archived_at) {
+      return 'forbidden';
     }
 
     if (!canManageProject(access)) {
@@ -582,7 +602,7 @@ export async function archiveProjectForUser(params: {
     const result = await client.query<ProjectRow>(
       `
         UPDATE projects AS p
-        SET deleted_at = COALESCE(p.deleted_at, now())
+        SET archived_at = COALESCE(p.archived_at, now())
         FROM teams AS t
         WHERE p.id = $1
           AND t.id = p.team_id
@@ -603,6 +623,7 @@ export async function archiveProjectForUser(params: {
             SELECT COUNT(*)::int
             FROM tasks
             WHERE tasks.project_id = p.id
+              AND tasks.deleted_at IS NULL
           ) AS task_count,
           p.archived_at,
           p.created_at,

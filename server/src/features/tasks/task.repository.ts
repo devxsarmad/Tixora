@@ -359,6 +359,7 @@ async function findTaskByIdForUser(
         ON ta.task_id = task.id
       LEFT JOIN comments
         ON comments.task_id = task.id
+       AND comments.deleted_at IS NULL
       LEFT JOIN users AS u
         ON u.id = ta.user_id
       LEFT JOIN project_members AS project_assignee
@@ -523,6 +524,7 @@ export async function listTasksForProject(params: {
         ON ta.task_id = task.id
       LEFT JOIN comments
         ON comments.task_id = task.id
+       AND comments.deleted_at IS NULL
       LEFT JOIN users AS u
         ON u.id = ta.user_id
       LEFT JOIN project_members AS project_assignee

@@ -50,7 +50,7 @@ function translateProjectConflict(error: unknown): never {
   if (isPostgresError(error) && error.code === POSTGRES_UNIQUE_VIOLATION) {
     throw new HttpError(
       409,
-      'An active project with this name already exists in the team',
+      'An active project with this name already exists in the organization',
       'PROJECT_NAME_TAKEN'
     );
   }
@@ -130,10 +130,18 @@ export async function archiveProject(params: {
 }
 
 function handleProjectMemberResult<T>(
-  result: T | null | 'forbidden' | 'not_team_member'
+  result: T | null | 'forbidden' | 'archived' | 'not_team_member' | 'self_manager_removal_blocked'
 ): T {
   if (result === 'forbidden') {
     throw new HttpError(403, 'Project permission denied', 'PROJECT_FORBIDDEN');
+  }
+
+  if (result === 'archived') {
+    throw new HttpError(403, 'Archived projects cannot be changed', 'PROJECT_ARCHIVED');
+  }
+
+  if (result === 'self_manager_removal_blocked') {
+    throw new HttpError(409, 'Transfer project manager access before removing yourself', 'PROJECT_MANAGER_TRANSFER_REQUIRED');
   }
 
   if (result === 'not_team_member') {
