@@ -131,7 +131,7 @@ export function ProjectSettingsModal({
             className={activeTab === 'members' ? 'tab-button active' : 'tab-button'}
             onClick={() => setActiveTab('members')}
           >
-            Members
+            Project members
           </button>
         </div>
 
@@ -142,12 +142,18 @@ export function ProjectSettingsModal({
           >
             <label>
               Project name
-              <input {...projectEditForm.register('name')} placeholder="Project name" />
+              <input {...projectEditForm.register('name')} placeholder="Project name" aria-invalid={Boolean(projectEditForm.formState.errors.name)} />
             </label>
+            {projectEditForm.formState.errors.name ? (
+              <span className="field-error">{projectEditForm.formState.errors.name.message}</span>
+            ) : null}
             <label>
               Description
-              <input {...projectEditForm.register('description')} placeholder="Description" />
+              <input {...projectEditForm.register('description')} placeholder="Description" aria-invalid={Boolean(projectEditForm.formState.errors.description)} />
             </label>
+            {projectEditForm.formState.errors.description ? (
+              <span className="field-error">{projectEditForm.formState.errors.description.message}</span>
+            ) : null}
             <div className="modal-actions split-actions">
               <button type="button" className="danger-button" onClick={() => void onArchiveProject()} disabled={isArchivingProject}>
                 {isArchivingProject ? 'Archiving...' : 'Archive'}
@@ -255,6 +261,7 @@ export function ProjectSettingsModal({
                   </div>
                   <select
                     value={member.role}
+                    disabled={isSavingMembers}
                     onChange={(event) =>
                       void onProjectRoleChange(
                         member.id,

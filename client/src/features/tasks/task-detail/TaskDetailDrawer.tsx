@@ -18,6 +18,7 @@ import {
   taskEditFormSchema
 } from '../../workspace/workspaceSchemas.js';
 import type { TaskSummary } from '../types.js';
+import { AssigneePicker } from '../components/AssigneePicker.js';
 
 type TaskDetailDrawerProps = {
   isOpen: boolean;
@@ -129,8 +130,11 @@ export function TaskDetailDrawer({
             >
               <label>
                 Task title
-                <input {...taskEditForm.register('title')} placeholder="Task title" />
+                <input {...taskEditForm.register('title')} placeholder="Task title" aria-invalid={Boolean(taskEditForm.formState.errors.title)} />
               </label>
+              {taskEditForm.formState.errors.title ? (
+                <span className="field-error">{taskEditForm.formState.errors.title.message}</span>
+              ) : null}
               <label>
                 Priority
                 <select {...taskEditForm.register('priority')}>
@@ -146,62 +150,27 @@ export function TaskDetailDrawer({
                 <input
                   {...taskEditForm.register('description')}
                   placeholder="Description"
+                  aria-invalid={Boolean(taskEditForm.formState.errors.description)}
                 />
               </label>
+              {taskEditForm.formState.errors.description ? (
+                <span className="field-error">{taskEditForm.formState.errors.description.message}</span>
+              ) : null}
               <label>
                 Due date
                 <input {...taskEditForm.register('dueAt')} type="datetime-local" />
               </label>
               {projectDetail ? (
-                <section className="modal-panel task-assignees-panel">
-                  <div className="panel-title-row">
-                    <h3>Task assignees</h3>
-                    <span className="meta-text required-marker">Required</span>
-                  </div>
-                  <p className="meta-text">
-                    {workspaceMemberCount} organization members ·{' '}
-                    {projectMembers.length} project members available for tasks.
-                  </p>
-                  <p className="meta-text">Only project members can be assigned here.</p>
-                  <div className="check-list compact-checks">
-                    {projectMembers.length === 0 ? (
-                      <p className="meta-text">
-                        No project members yet. Add organization members to project access first.
-                      </p>
-                    ) : null}
-                    {projectMembers.map((member) => (
-                      <label key={member.id} className="check-row">
-                        <input
-                          type="checkbox"
-                          value={member.id}
-                          {...taskEditForm.register('assigneeIds')}
-                        />
-                        <span>{member.displayName}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {taskEditForm.formState.errors.assigneeIds ? (
-                    <span className="field-error">
-                      {taskEditForm.formState.errors.assigneeIds.message}
-                    </span>
-                  ) : null}
-                  <div className="assignee-helper-actions">
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={onManageProjectMembers}
-                    >
-                      Manage project members
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={onAddOrganizationMember}
-                    >
-                      Add organization member
-                    </button>
-                  </div>
-                </section>
+                <AssigneePicker
+                  members={projectMembers}
+                  selectedIds={taskEditForm.watch('assigneeIds') ?? []}
+                  workspaceMemberCount={workspaceMemberCount}
+                  error={taskEditForm.formState.errors.assigneeIds?.message}
+                  disabled={isSavingTask}
+                  onChange={(selectedIds) => taskEditForm.setValue('assigneeIds', selectedIds, { shouldDirty: true, shouldValidate: true })}
+                  onManageProjectMembers={onManageProjectMembers}
+                  onAddOrganizationMember={onAddOrganizationMember}
+                />
               ) : null}
               <button type="submit" className="primary-button" disabled={isSavingTask}>
                 {isSavingTask ? 'Saving...' : 'Save task'}

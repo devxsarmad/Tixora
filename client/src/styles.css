@@ -1910,8 +1910,8 @@ label {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
-  width: min(68vw, 980px);
-  min-width: min(720px, 100vw);
+  width: min(70vw, 1040px);
+  min-width: min(760px, 100vw);
   height: 100vh;
   padding: 20px;
   border-left: 1px solid var(--border);
@@ -1947,8 +1947,8 @@ label {
 
 .modal-split {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 18px;
+  grid-template-columns: minmax(340px, 0.92fr) minmax(360px, 1.08fr);
+  gap: 20px;
   align-items: start;
 }
 
@@ -1974,15 +1974,36 @@ label {
   background: var(--page-bg);
 }
 
+.assignee-picker.has-error {
+  border-color: var(--danger);
+}
+
+.compact-field-label {
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.assignee-list {
+  max-height: 190px;
+  overflow: auto;
+}
+
 .assignee-option {
-  min-height: 34px;
+  min-height: 38px;
 }
 
 .compact-checks .check-row {
-  min-height: 34px;
-  padding: 6px 4px;
-  border-radius: 6px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
   cursor: pointer;
+}
+
+.compact-checks .check-row.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .compact-checks .check-row:hover {
@@ -1990,9 +2011,31 @@ label {
 }
 
 .assignee-option .avatar {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   font-size: 10px;
+}
+
+.assignee-option > span:last-child {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.assignee-option strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assignee-option small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .assignee-helper-actions {
@@ -2146,21 +2189,21 @@ label {
 .modal-member-row select,
 .modal-member-row .role-pill {
   width: auto;
-  min-width: 74px;
-  min-height: 26px;
-  padding: 0 24px 0 10px;
+  min-width: 68px;
+  min-height: 24px;
+  padding: 0 22px 0 8px;
   border-color: var(--success-bg);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--success);
   background-color: var(--success-bg);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .modal-member-row .role-pill {
   display: inline-grid;
   place-items: center;
-  padding: 5px 10px;
+  padding: 4px 8px;
 }
 
 .modal-member-row .ghost-button {
@@ -3353,8 +3396,10 @@ button[disabled] {
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
   border-radius: var(--radius-card);
-  background: var(--color-bg);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .pending-action-heading {
@@ -3391,6 +3436,7 @@ button[disabled] {
 
 .pending-action-fields {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -3406,7 +3452,7 @@ button[disabled] {
 }
 
 .pending-action-fields input {
-  min-height: 36px;
+  min-height: 34px;
   width: 100%;
   padding: 0 10px;
   border: 1px solid var(--border);
@@ -3494,3 +3540,18 @@ button[disabled] {
   }
 }
 
+
+@media (max-width: 980px) {
+  .task-detail-drawer {
+    width: 100vw;
+    min-width: 0;
+  }
+
+  .modal-split {
+    grid-template-columns: 1fr;
+  }
+
+  .pending-action-fields {
+    grid-template-columns: 1fr;
+  }
+}

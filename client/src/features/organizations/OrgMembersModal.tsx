@@ -87,13 +87,17 @@ export function OrgMembersModal({
   const inviteCandidateEmail = userDirectorySearch.trim().toLowerCase();
   const alreadyMemberTypedEmail = members.some((member) => member.email.toLowerCase() === inviteCandidateEmail);
   const alreadyInvitedTypedEmail = invitedInvitations.some((invitation) => invitation.email.toLowerCase() === inviteCandidateEmail);
-  const hasManualEmail = Boolean(teamMemberEmail.trim());
+  const manualEmail = teamMemberEmail.trim().toLowerCase();
+  const canUseManualEmail =
+    isValidEmail(manualEmail) &&
+    !members.some((member) => member.email.toLowerCase() === manualEmail) &&
+    !invitedInvitations.some((invitation) => invitation.email.toLowerCase() === manualEmail);
   const canInviteTypedEmail =
     isValidEmail(inviteCandidateEmail) &&
     availableDirectoryUsers.length === 0 &&
     !alreadyMemberTypedEmail &&
     !alreadyInvitedTypedEmail;
-  const canSubmit = selectedDirectoryUserIds.length > 0 || canInviteTypedEmail || hasManualEmail;
+  const canSubmit = selectedDirectoryUserIds.length > 0 || canInviteTypedEmail || canUseManualEmail;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,7 +105,7 @@ export function OrgMembersModal({
     const selectedEmails = selectedDirectoryUserIds
       .map((userId) => userDirectoryResults.find((user) => user.id === userId)?.email)
       .filter((email): email is string => Boolean(email));
-    const fallbackEmail = teamMemberEmail.trim().toLowerCase();
+    const fallbackEmail = canUseManualEmail ? manualEmail : '';
     const inviteEmail = canInviteTypedEmail ? inviteCandidateEmail : fallbackEmail;
 
     if (selectedEmails.length > 0) {
@@ -224,8 +228,12 @@ export function OrgMembersModal({
                     setSelectedDirectoryUserIds([]);
                   }}
                   placeholder="person@example.com"
+                  aria-invalid={Boolean(teamMemberEmail.trim()) && !canUseManualEmail}
                 />
               </label>
+              {teamMemberEmail.trim() && !canUseManualEmail ? (
+                <span className="field-error">Enter a valid email that is not already a member or invited.</span>
+              ) : null}
             </details>
             <label>
               Add as organization role
@@ -240,7 +248,7 @@ export function OrgMembersModal({
             <button type="submit" className="primary-button" disabled={isSaving || !canSubmit}>
               {isSaving ? 'Saving...' : selectedDirectoryUserIds.length > 0
                 ? 'Add ' + selectedDirectoryUserIds.length + ' members'
-                : teamMemberEmail || canInviteTypedEmail
+                : canUseManualEmail || canInviteTypedEmail
                   ? 'Send invitation'
                   : 'Add selected members'}
             </button>
@@ -295,7 +303,7 @@ export function OrgMembersModal({
                       type="button"
                       className="ghost-button"
                       onClick={() => void onRemoveMember(member.id)}
-                    disabled={isSaving}
+                      disabled={isSaving}
                     >
                       {isSaving ? 'Removing...' : 'Remove'}
                     </button>
