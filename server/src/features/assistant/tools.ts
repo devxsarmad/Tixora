@@ -25,13 +25,20 @@ const summarizeAssigneeWorkloadSchema = z.object({
   projectId: z.string().uuid().optional()
 });
 
+const assigneeReferencesSchema: z.ZodType<string[], z.ZodTypeDef, unknown> = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return value;
+}, z.array(z.string().trim().min(1)).min(1, 'Assign at least one project member.').max(20));
+
 const createTaskToolSchema = z.object({
   projectId: z.string().uuid(),
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().max(4000).optional(),
   priority: taskPrioritySchema.optional(),
   dueAt: z.string().trim().min(1).nullable().optional(),
-  assigneeIds: z.array(z.string().trim().min(1)).min(1, 'Assign at least one project member.').max(20)
+  assigneeIds: assigneeReferencesSchema
 });
 
 const taskReferenceSchema = {
@@ -441,12 +448,23 @@ export async function logAssistantActionEvent(params: { userId: string; toolName
   );
 }
 
+function friendlyArgumentName(path: PropertyKey[]) {
+  const key = String(path[0] ?? 'field');
+  const labels: Record<string, string> = {
+    projectId: 'Project',
+    taskId: 'Ticket',
+    taskTitle: 'Ticket title',
+    assigneeIds: 'Assignees',
+    userId: 'Member',
+    userRef: 'Member',
+    dueAt: 'Due date'
+  };
+  return labels[key] ?? key;
+}
+
 function formatZodIssues(error: z.ZodError) {
   return error.issues
-    .map((issue) => {
-      const path = issue.path.length > 0 ? issue.path.join('.') + ': ' : '';
-      return path + issue.message;
-    })
+    .map((issue) => friendlyArgumentName(issue.path) + ': ' + issue.message)
     .join('; ');
 }
 
@@ -608,12 +626,67 @@ async function findAccessibleTaskByTitle(params: { userId: string; orgId: string
   throw new Error('Could not find an accessible ticket named "' + params.taskTitle + '".');
 }
 
+function localDateAtEndOfDay(year: number, monthIndex: number, day: number) {
+  return new Date(year, monthIndex, day, 17, 0, 0, 0).toISOString();
+}
+
+function parseRelativeDueAt(value: string) {
+  const normalized = value.toLowerCase().replace(/[,]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0, 0, 0);
+
+  if (normalized === 'today' || normalized === 'tonight') return today.toISOString();
+  if (normalized === 'tomorrow' || normalized === 'tmrw' || normalized === 'next day') {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString();
+  }
+
+  const inDaysMatch = normalized.match(/(?:in|after)\s+(\d+)\s+days?/);
+  if (inDaysMatch) {
+    const due = new Date(today);
+    due.setDate(due.getDate() + Number(inDaysMatch[1]));
+    return due.toISOString();
+  }
+
+  if (normalized === 'next week') {
+    const due = new Date(today);
+    due.setDate(due.getDate() + 7);
+    return due.toISOString();
+  }
+
+  const monthNames = new Map([
+    ['jan', 0], ['january', 0], ['feb', 1], ['february', 1], ['mar', 2], ['march', 2],
+    ['apr', 3], ['april', 3], ['may', 4], ['jun', 5], ['june', 5], ['jul', 6], ['july', 6],
+    ['aug', 7], ['august', 7], ['sep', 8], ['sept', 8], ['september', 8], ['oct', 9], ['october', 9],
+    ['nov', 10], ['november', 10], ['dec', 11], ['december', 11]
+  ]);
+  const monthMatch = normalized.match(/(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\s*(\d{4})?/);
+  if (monthMatch) {
+    const day = Number(monthMatch[1]);
+    const month = monthNames.get(monthMatch[2]);
+    const year = monthMatch[3] ? Number(monthMatch[3]) : now.getFullYear();
+    if (month !== undefined && day >= 1 && day <= 31) return localDateAtEndOfDay(year, month, day);
+  }
+
+  return null;
+}
+
 function normalizeDueAt(value: string | null | undefined) {
   if (value === undefined || value === null || value.trim() === '') return value ?? null;
+  const relativeDueAt = parseRelativeDueAt(value);
+  if (relativeDueAt) return relativeDueAt;
+
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error('Could not understand due date "' + value + '". Use a clear date like 2026-08-31.');
+    throw new Error('Could not understand due date "' + value + '". Use a clear date like 2026-08-31 or tomorrow.');
   }
+
+  const looksDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+  if (looksDateOnly) {
+    return localDateAtEndOfDay(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+  }
+
   return parsed.toISOString();
 }
 
@@ -1035,7 +1108,7 @@ export async function executeAssistantToolCall(params: {
 
     if (params.call.name === 'create_task') {
       const args = parseToolArguments(params.call.argumentsText, createTaskToolSchema);
-      const assigneeIds = await resolveProjectAssigneeReferences(args.projectId, args.assigneeIds);
+      const assigneeIds = await resolveProjectAssigneeReferences(args.projectId, args.assigneeIds as string[]);
       const task = await createTask({
         projectId: args.projectId,
         userId: params.userId,

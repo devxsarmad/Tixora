@@ -54,6 +54,7 @@ const toolSystemPrompt = [
   'For status/priority/due-date changes with a named ticket, pass taskTitle; do not require a UUID.',
   'For workload questions with a person name or email, call summarize_assignee_workload with userRef; do not require a UUID.',
   'For task creation assignees, pass the exact member name or email the user typed when no UUID is available.',
+  'For due dates, pass the exact user phrase for relative dates like today, tomorrow, next week, or 31 August 2026; the server will normalize it.',
   "For requests like find/search/show tickets, call search_tasks with the user\'s search text.",
   'For requests like comment on/add note to a ticket, call add_task_comment with taskTitle and body.',
   'If Current project ID is provided in context, include it as projectId for project-scoped tools.',
