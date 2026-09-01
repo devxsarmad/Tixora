@@ -29,7 +29,8 @@ const suggestionPrompts = [
   'How many tickets are in this project?',
   'List overdue tickets.',
   'Summarize my workload in this project.',
-  'What is blocked right now?'
+  'What is blocked right now?',
+  'Which tickets have no assignee?'
 ];
 
 function createMessageId() {
@@ -48,6 +49,16 @@ function uniqueSources(sources: AskTixoraSource[] = []) {
   });
 }
 
+function getAnswerModeLabel(message: Pick<AskMessage, 'sources' | 'toolResults' | 'pendingActions' | 'tone'>) {
+  if (message.tone === 'error') return 'Needs attention';
+  const pendingActions = message.pendingActions ?? [];
+  const toolResults = message.toolResults ?? [];
+  if (pendingActions.length > 0) return 'Confirmation needed';
+  if (toolResults.length > 0) return getToolSummary(toolResults, pendingActions) ?? 'Database answer';
+  if ((message.sources ?? []).length > 0) return 'Knowledge answer';
+  return null;
+}
+
 function getToolSummary(toolResults: AskTixoraToolResult[] = [], pendingActions: PendingAssistantAction[] = []) {
   if (pendingActions.length > 0) return 'Confirmation needed';
   const successfulTools = toolResults.filter((result) => result.ok).map((result) => result.toolName);
@@ -56,6 +67,7 @@ function getToolSummary(toolResults: AskTixoraToolResult[] = [], pendingActions:
   if (successfulTools.includes('update_task_priority')) return 'Updated priority';
   if (successfulTools.includes('update_task_due_date')) return 'Updated due date';
   if (successfulTools.includes('add_task_comment')) return 'Added comment';
+  if (successfulTools.includes('list_tasks')) return 'Ticket list';
   if (successfulTools.includes('search_tasks')) return 'Ticket search';
   if (successfulTools.includes('summarize_assignee_workload')) return 'Workload summary';
   if (successfulTools.includes('list_overdue_tasks')) return 'Overdue lookup';
@@ -265,7 +277,7 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
 
         {messages.map((message) => {
           const pendingActions = message.pendingActions ?? [];
-          const toolSummary = getToolSummary(message.toolResults, pendingActions);
+          const answerModeLabel = getAnswerModeLabel(message);
           return (
             <article
               key={message.id}
@@ -278,7 +290,7 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
               {message.role === 'assistant' ? (
                 <div className="ask-message-meta">
                   <span>Ask Tixora</span>
-                  {toolSummary ? <small>{toolSummary}</small> : null}
+                  {answerModeLabel ? <small>{answerModeLabel}</small> : null}
                 </div>
               ) : null}
               <p>{message.content}</p>

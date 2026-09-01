@@ -10,7 +10,7 @@ export type AskTixoraSource = {
   score: number;
 };
 
-export type AskTixoraToolName = 'list_overdue_tasks' | 'summarize_assignee_workload' | 'search_tasks' | 'create_task' | 'update_task_status' | 'update_task_priority' | 'update_task_due_date' | 'add_task_comment';
+export type AskTixoraToolName = 'list_overdue_tasks' | 'list_tasks' | 'summarize_assignee_workload' | 'search_tasks' | 'create_task' | 'update_task_status' | 'update_task_priority' | 'update_task_due_date' | 'add_task_comment';
 
 export type AskTixoraToolResult = {
   toolCallId: string;

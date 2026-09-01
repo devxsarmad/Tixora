@@ -82,6 +82,7 @@ function emptySources() {
 
 const assistantToolNames: ToolName[] = [
   'list_overdue_tasks',
+  'list_tasks',
   'summarize_assignee_workload',
   'search_tasks',
   'create_task',
@@ -158,6 +159,42 @@ function toAssistantHttpError(error: unknown, fallback: string): HttpError {
   );
 }
 
+function buildDeterministicReadToolCall(query: string, projectId?: string): AssistantToolCall | null {
+  const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const mentionsTickets = /\b(task|tasks|ticket|tickets|tikcet|tikcets)\b/.test(normalized);
+  const asksForList = /\b(which|show|list|find|get|what)\b/.test(normalized);
+
+  if (!mentionsTickets || !asksForList) return null;
+
+  const args: Record<string, unknown> = {};
+  if (projectId) args.projectId = projectId;
+
+  if (/\bunassigned\b|no assignee|without assignee|no owner|without owner/.test(normalized)) {
+    args.assigneeState = 'unassigned';
+  }
+
+  if (/\bblocked\b/.test(normalized)) args.status = 'blocked';
+  if (/\bdone\b|completed/.test(normalized)) args.status = 'done';
+  if (/in progress|progressing/.test(normalized)) args.status = 'in_progress';
+  if (/to do|todo|not started/.test(normalized)) args.status = 'todo';
+
+  if (/\burgent\b/.test(normalized)) args.priority = 'urgent';
+  else if (/\bhigh priority\b|priority high/.test(normalized)) args.priority = 'high';
+  else if (/\bmedium priority\b|priority medium/.test(normalized)) args.priority = 'medium';
+  else if (/\blow priority\b|priority low/.test(normalized)) args.priority = 'low';
+
+  if (/\boverdue\b/.test(normalized)) args.due = 'overdue';
+  if (/\bupcoming\b/.test(normalized)) args.due = 'upcoming';
+
+  if (Object.keys(args).length === (projectId ? 1 : 0)) return null;
+
+  return {
+    id: 'direct_' + Date.now(),
+    name: 'list_tasks',
+    argumentsText: JSON.stringify(args)
+  };
+}
+
 function isTaskCountQuestion(query: string) {
   const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const asksForCount =
@@ -224,6 +261,18 @@ function buildToolSuccessAnswer(toolResults: AssistantToolResult[]) {
 
   const commentResult = toolResults.find((result) => result.ok && result.toolName === 'add_task_comment');
   if (commentResult) return 'Added the comment to the ticket.';
+
+  const listTasksResult = toolResults.find((result) => result.ok && result.toolName === 'list_tasks');
+  if (listTasksResult && Array.isArray(listTasksResult.result)) {
+    const tasks = listTasksResult.result as Array<{ title?: string; status?: string; priority?: string; dueAt?: string | null; assigneeCount?: number }>;
+    if (tasks.length === 0) return 'No matching tickets found in this scope.';
+    const labels = tasks.slice(0, 8).map((task) => {
+      const due = task.dueAt ? ', due ' + new Date(task.dueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      const assignees = typeof task.assigneeCount === 'number' ? ', ' + task.assigneeCount + ' assignee' + (task.assigneeCount === 1 ? '' : 's') : '';
+      return (task.title ?? 'Untitled ticket') + ' (' + (task.status ?? 'unknown') + ', ' + (task.priority ?? 'unknown') + due + assignees + ')';
+    }).join('; ');
+    return 'I found ' + tasks.length + ' matching ticket' + (tasks.length === 1 ? '' : 's') + ': ' + labels + (tasks.length > 8 ? '; and more.' : '.');
+  }
 
   const searchResult = toolResults.find((result) => result.ok && result.toolName === 'search_tasks');
   if (searchResult && Array.isArray(searchResult.result)) {
@@ -335,6 +384,22 @@ export async function askAssistant(params: {
 
   if (!scope) {
     throw new HttpError(404, 'Assistant scope not found', 'ASSISTANT_SCOPE_NOT_FOUND');
+  }
+
+  const deterministicReadCall = buildDeterministicReadToolCall(params.input.query, params.input.projectId);
+  if (deterministicReadCall) {
+    const toolResults = [await executeAssistantToolCall({
+      call: deterministicReadCall,
+      userId: params.userId,
+      orgId: scope.orgId
+    })];
+
+    return {
+      answer: buildToolFailureAnswer(toolResults) ?? buildToolSuccessAnswer(toolResults) ?? buildFallbackAnswer([], toolResults),
+      toolResults,
+      pendingActions: [],
+      sources: []
+    };
   }
 
   if (isTaskCountQuestion(params.input.query)) {

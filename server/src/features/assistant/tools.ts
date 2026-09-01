@@ -11,6 +11,14 @@ const listOverdueTasksSchema = z.object({
   projectId: z.string().uuid().optional()
 });
 
+const listTasksToolSchema = z.object({
+  projectId: z.string().uuid().optional(),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  assigneeState: z.enum(['assigned', 'unassigned']).optional(),
+  due: z.enum(['overdue', 'upcoming']).optional()
+});
+
 const summarizeAssigneeWorkloadSchema = z.object({
   userId: z.string().uuid().optional(),
   userRef: z.string().trim().min(1).optional(),
@@ -73,6 +81,7 @@ const addTaskCommentSchema = z.object({
 
 export type ToolName =
   | 'list_overdue_tasks'
+  | 'list_tasks'
   | 'summarize_assignee_workload'
   | 'search_tasks'
   | 'create_task'
@@ -156,6 +165,25 @@ export const assistantToolDefinitions = [
       parameters: {
         type: 'object',
         properties: { projectId: { type: 'string', format: 'uuid' } },
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: 'function',
+    mutating: false,
+    function: {
+      name: 'list_tasks',
+      description: 'List accessible tickets by structured filters like status, priority, due date, or assigned/unassigned state. Use this for show/list/which ticket questions that do not need semantic text search.',
+      parameters: {
+        type: 'object',
+        properties: {
+          projectId: { type: 'string', format: 'uuid' },
+          status: { type: 'string', enum: ['todo', 'in_progress', 'blocked', 'done'] },
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+          assigneeState: { type: 'string', enum: ['assigned', 'unassigned'] },
+          due: { type: 'string', enum: ['overdue', 'upcoming'] }
+        },
         additionalProperties: false
       }
     }
@@ -305,6 +333,7 @@ const mutatingToolNames = new Set<ToolName>([
 
 function schemaForTool(toolName: ToolName) {
   if (toolName === 'list_overdue_tasks') return listOverdueTasksSchema;
+  if (toolName === 'list_tasks') return listTasksToolSchema;
   if (toolName === 'summarize_assignee_workload') return summarizeAssigneeWorkloadSchema;
   if (toolName === 'search_tasks') return searchTasksSchema;
   if (toolName === 'create_task') return createTaskToolSchema;
@@ -600,6 +629,65 @@ function formatTask(task: TaskSummary) {
   };
 }
 
+async function listFilteredTasks(params: {
+  userId: string;
+  orgId: string;
+  projectId?: string;
+  status?: TaskSummary['status'];
+  priority?: TaskSummary['priority'];
+  assigneeState?: 'assigned' | 'unassigned';
+  due?: 'overdue' | 'upcoming';
+}) {
+  const result = await query<ToolTaskRow>(
+    `
+      SELECT
+        task.id,
+        task.project_id,
+        task.title,
+        task.status,
+        task.priority,
+        task.due_at,
+        p.name AS project_name,
+        COUNT(DISTINCT ta.user_id)::int AS assignee_count
+      FROM tasks AS task
+      JOIN projects AS p
+        ON p.id = task.project_id
+      JOIN team_members AS tm
+        ON tm.team_id = p.team_id
+       AND tm.user_id = $2
+      LEFT JOIN project_members AS pm
+        ON pm.project_id = p.id
+       AND pm.user_id = $2
+      LEFT JOIN task_assignees AS ta
+        ON ta.task_id = task.id
+      WHERE p.team_id = $1
+        AND ($3::uuid IS NULL OR p.id = $3)
+        AND ($4::task_status IS NULL OR task.status = $4)
+        AND ($5::task_priority IS NULL OR task.priority = $5)
+        AND ($6::text IS NULL OR ($6 = 'overdue' AND task.due_at < now() AND task.status <> 'done') OR ($6 = 'upcoming' AND task.due_at >= now()))
+        AND p.deleted_at IS NULL
+        AND task.deleted_at IS NULL
+        AND (tm.role IN ('owner', 'admin') OR pm.user_id IS NOT NULL)
+      GROUP BY task.id, p.name
+      HAVING ($7::text IS NULL OR ($7 = 'unassigned' AND COUNT(DISTINCT ta.user_id) = 0) OR ($7 = 'assigned' AND COUNT(DISTINCT ta.user_id) > 0))
+      ORDER BY task.updated_at DESC
+      LIMIT 50
+    `,
+    [params.orgId, params.userId, params.projectId ?? null, params.status ?? null, params.priority ?? null, params.due ?? null, params.assigneeState ?? null]
+  );
+
+  return result.rows.map((task) => ({
+    id: task.id,
+    projectId: task.project_id,
+    projectName: task.project_name,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    dueAt: task.due_at,
+    assigneeCount: task.assignee_count
+  }));
+}
+
 async function listOverdueTasks(params: { userId: string; orgId: string; projectId?: string }) {
   if (params.projectId) {
     const tasks = await listProjectTasks({
@@ -872,6 +960,24 @@ export async function executeAssistantToolCall(params: {
         toolName: params.call.name,
         ok: true,
         result: await listOverdueTasks({ userId: params.userId, orgId: params.orgId, projectId: args.projectId })
+      };
+    }
+
+    if (params.call.name === 'list_tasks') {
+      const args = parseToolArguments(params.call.argumentsText, listTasksToolSchema);
+      return {
+        toolCallId: params.call.id,
+        toolName: params.call.name,
+        ok: true,
+        result: await listFilteredTasks({
+          userId: params.userId,
+          orgId: params.orgId,
+          projectId: args.projectId,
+          status: args.status,
+          priority: args.priority,
+          assigneeState: args.assigneeState,
+          due: args.due
+        })
       };
     }
 

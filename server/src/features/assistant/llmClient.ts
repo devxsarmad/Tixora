@@ -49,7 +49,7 @@ const groundedSystemPrompt = [
 const toolSystemPrompt = [
   'You are Ask Tixora deciding whether a fixed tool is needed.',
   'Use only the provided tools. Never invent tool names or arguments.',
-  'Call read tools for structured task questions like overdue tasks, workload, or finding/searching tickets.',
+  'Call read tools for structured task questions like overdue tasks, workload, unassigned tickets, blocked tickets, status lists, priority lists, or finding/searching tickets.',
   'Call write tools only when the user clearly asks to create a task, change status, update priority, update due date, or add a comment.',
   'For status/priority/due-date changes with a named ticket, pass taskTitle; do not require a UUID.',
   'For workload questions with a person name or email, call summarize_assignee_workload with userRef; do not require a UUID.',
