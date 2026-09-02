@@ -1,3 +1,4 @@
+import { ChevronDown, Plus } from 'lucide-react';
 import type { TeamSummary } from '../../features/workspace/types.js';
 
 type OrgSwitcherProps = {
@@ -21,7 +22,7 @@ export function OrgSwitcher({ teams, selectedTeamSlug, isOpen, onToggle, onSelec
           <strong>{selectedTeam?.name ?? 'No organization'}</strong>
           <small>Workspace</small>
         </span>
-        <span className="switcher-chevron">⌄</span>
+        <span className="switcher-chevron"><ChevronDown aria-hidden="true" /></span>
       </button>
       {isOpen ? (
         <div className="org-switcher-popover" role="menu">
@@ -34,7 +35,7 @@ export function OrgSwitcher({ teams, selectedTeamSlug, isOpen, onToggle, onSelec
               </span>
             </button>
           ))}
-          <button type="button" className="org-create-option" onClick={onCreate}>+ Create new organization</button>
+          <button type="button" className="org-create-option" onClick={onCreate}><Plus aria-hidden="true" /> Create new organization</button>
         </div>
       ) : null}
     </div>

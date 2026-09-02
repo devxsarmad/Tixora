@@ -1,4 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   color-scheme: light;
@@ -44,7 +48,7 @@
   --radius-panel: 8px;
   --radius-control: 8px;
   --font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-heading: Geist, Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-heading: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
   --icon-stroke-width: 1.75;
   --primary: var(--color-accent);
@@ -90,7 +94,7 @@ body {
   background: var(--page);
   font-family: var(--font-body);
   font-weight: 400;
-  letter-spacing: -0.011em;
+  letter-spacing: -0.004em;
 }
 
 button,
@@ -122,8 +126,8 @@ h1,
 h2,
 h3 {
   font-family: var(--font-heading);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 650;
+  letter-spacing: -0.012em;
 }
 
 strong {
@@ -133,8 +137,8 @@ strong {
 input,
 select {
   width: 100%;
-  min-height: 38px;
-  padding: 0 12px;
+  min-height: 36px;
+  padding: 0 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   color: var(--text);
@@ -168,15 +172,15 @@ button:focus-visible {
 }
 
 button {
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   color: var(--text);
   background: var(--card);
   box-shadow: none;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .primary-button {
@@ -298,8 +302,8 @@ select[aria-invalid="true"],
 
 .auth-hero h1 {
   margin-bottom: 14px;
-  font-size: 38px;
-  line-height: 1.05;
+  font-size: 34px;
+  line-height: 1.08;
 }
 
 .auth-hero p {
@@ -1401,15 +1405,15 @@ label {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 22px 18px 28px;
+  padding: 18px 18px 28px;
 }
 
 .board-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
 .project-title {
@@ -1422,8 +1426,8 @@ label {
 .project-title h1 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 24px;
-  line-height: 1.15;
+  font-size: 21px;
+  line-height: 1.2;
 }
 
 .project-title p {
@@ -1480,7 +1484,7 @@ label {
 .kanban-board {
   display: grid;
   grid-template-columns: repeat(4, minmax(220px, 1fr));
-  gap: 14px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -1528,7 +1532,7 @@ label {
 .kanban-column-header h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .kanban-column-header span {
@@ -1549,9 +1553,9 @@ label {
 
 .task-card {
   display: grid;
-  gap: 12px;
-  min-height: 112px;
-  padding: 14px;
+  gap: 10px;
+  min-height: 104px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface);
@@ -1571,7 +1575,7 @@ label {
 
 .task-card-main {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   min-height: auto;
   padding: 0;
@@ -1582,7 +1586,7 @@ label {
 
 .task-card-main strong {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.35;
 }
 
@@ -2577,6 +2581,60 @@ svg {
   stroke-width: var(--icon-stroke-width);
 }
 
+.icon-button svg,
+.nav-icon svg,
+.switcher-chevron svg,
+.task-meta svg,
+.calendar-nav-button svg,
+.ask-empty-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: var(--icon-stroke-width);
+}
+
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.task-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-meta svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ask-empty-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.org-create-option svg,
+.primary-button svg,
+.secondary-button svg,
+.ghost-button svg,
+.danger-button svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  stroke-width: var(--icon-stroke-width);
+}
+
+.org-create-option,
+.primary-button,
+.secondary-button,
+.ghost-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
 .icon-button {
   font-size: 16px;
   line-height: 1;
@@ -3555,3 +3613,4 @@ button[disabled] {
     grid-template-columns: 1fr;
   }
 }
+

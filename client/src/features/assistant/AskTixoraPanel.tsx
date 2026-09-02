@@ -1,3 +1,4 @@
+import { Bot } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -255,7 +256,7 @@ export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTix
       <div className="ask-chat" aria-live="polite">
         {messages.length === 0 ? (
           <div className="ask-empty-state">
-            <div className="ask-empty-icon" aria-hidden="true">?</div>
+            <div className="ask-empty-icon" aria-hidden="true"><Bot /></div>
             <div>
               <h3>Start with a project question</h3>
               <p>Ask Tixora can read your accessible tasks and prepare safe actions like creating tickets or changing status.</p>

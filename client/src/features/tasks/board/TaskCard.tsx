@@ -1,4 +1,5 @@
 import type { DragEvent } from 'react';
+import { CalendarDays, MessageSquare } from 'lucide-react';
 import { formatDueDate, getInitials } from '../../../lib/formatters.js';
 import type { TaskSummary } from '../types.js';
 
@@ -46,7 +47,7 @@ export function TaskCard({
           />
         </span>
         <span className="task-card-footer">
-          <span className="task-meta">□ {formatDueDate(task.dueAt)}</span>
+          <span className="task-meta"><CalendarDays aria-hidden="true" /> {formatDueDate(task.dueAt)}</span>
           <span className="mini-avatar-stack">
             {task.assignees.slice(0, 3).map((assignee) => (
               <span key={assignee.id} className="avatar mini-avatar">
@@ -60,7 +61,7 @@ export function TaskCard({
               <span className="task-meta">+{task.assignees.length - 3}</span>
             ) : null}
           </span>
-          <span className="task-meta">◇ {task.commentCount}</span>
+          <span className="task-meta"><MessageSquare aria-hidden="true" /> {task.commentCount}</span>
         </span>
       </button>
     </article>

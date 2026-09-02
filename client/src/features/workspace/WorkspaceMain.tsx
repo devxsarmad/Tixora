@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Settings } from 'lucide-react';
 import type { DragEvent } from 'react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -233,10 +234,10 @@ export function WorkspaceMain({
                 ) : null}
               </div>
               <button type="button" className="ghost-button" disabled={!selectedProject} onClick={onOpenProjectSettings}>
-                Project settings
+                <Settings aria-hidden="true" /> Project settings
               </button>
               <button type="button" className="primary-button" disabled={!selectedProject} onClick={onOpenCreateTask}>
-                + Create task
+                <Plus aria-hidden="true" /> Create task
               </button>
             </div>
           </header>

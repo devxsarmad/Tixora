@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
@@ -70,10 +71,7 @@ export function RegisterPage({ disabled, onSubmit }: RegisterPageProps) {
                 onClick={() => setIsPasswordVisible((current) => !current)}
                 aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
+                {isPasswordVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
               </button>
         </div>
         {errors.password ? (

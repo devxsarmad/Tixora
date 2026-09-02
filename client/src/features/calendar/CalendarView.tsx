@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { TaskSummary } from '../tasks/types.js';
 
@@ -125,13 +126,13 @@ export function CalendarView({ tasks, statusLabels, onOpenTask }: CalendarViewPr
         </div>
         <div className="calendar-controls" aria-label="Calendar navigation">
           <button type="button" className="icon-button calendar-nav-button" onClick={() => moveMonth(-1)} aria-label="Previous month">
-            <span aria-hidden="true">{'<'}</span>
+            <ChevronLeft aria-hidden="true" />
           </button>
           <button type="button" className="secondary-button calendar-today-button" onClick={goToToday}>
             Today
           </button>
           <button type="button" className="icon-button calendar-nav-button" onClick={() => moveMonth(1)} aria-label="Next month">
-            <span aria-hidden="true">{'>'}</span>
+            <ChevronRight aria-hidden="true" />
           </button>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { Mail, UserMinus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { getInitials } from '../../lib/formatters.js';
 import { isValidEmail } from '../../lib/validators.js';
@@ -147,7 +148,7 @@ export function OrgMembersModal({
             onClick={onClose}
             aria-label="Close organization members"
           >
-            ×
+            <X aria-hidden="true" />
           </button>
         </div>
 
@@ -270,7 +271,7 @@ export function OrgMembersModal({
               ) : null}
               {invitedInvitations.map((invitation) => (
                 <article key={invitation.id} className="member-row modal-member-row invited-member-row">
-                  <span className="avatar invite-avatar">@</span>
+                  <span className="avatar invite-avatar"><Mail aria-hidden="true" /></span>
                   <div>
                     <strong>{invitation.email}</strong>
                     <p>Invitation sent</p>
@@ -305,7 +306,7 @@ export function OrgMembersModal({
                       onClick={() => void onRemoveMember(member.id)}
                       disabled={isSaving}
                     >
-                      {isSaving ? 'Removing...' : 'Remove'}
+                      {isSaving ? 'Removing...' : <><UserMinus aria-hidden="true" /> Remove</>}
                     </button>
                   ) : null}
                 </article>

@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Archive, UserMinus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { getInitials } from '../../lib/formatters.js';
@@ -114,7 +115,7 @@ export function ProjectSettingsModal({
             onClick={onClose}
             aria-label="Close project settings"
           >
-            ×
+            <X aria-hidden="true" />
           </button>
         </div>
 
@@ -156,7 +157,7 @@ export function ProjectSettingsModal({
             ) : null}
             <div className="modal-actions split-actions">
               <button type="button" className="danger-button" onClick={() => void onArchiveProject()} disabled={isArchivingProject}>
-                {isArchivingProject ? 'Archiving...' : 'Archive'}
+                {isArchivingProject ? 'Archiving...' : <><Archive aria-hidden="true" /> Archive</>}
               </button>
               <button type="submit" className="primary-button" disabled={isSavingProject}>
                 {isSavingProject ? 'Saving...' : 'Save project'}
@@ -171,7 +172,7 @@ export function ProjectSettingsModal({
               <div className="inline-hint">
                 <p>These are people from your organization. Adding someone here gives them board access.</p>
                 <button type="button" className="icon-button" onClick={dismissProjectMemberHint} aria-label="Dismiss project member hint">
-                  ×
+                  <X aria-hidden="true" />
                 </button>
               </div>
             ) : null}
@@ -279,7 +280,7 @@ export function ProjectSettingsModal({
                     onClick={() => void onRemoveProjectMember(member.id)}
                     disabled={isSavingMembers}
                   >
-                    {isSavingMembers ? 'Removing...' : 'Remove'}
+                    {isSavingMembers ? 'Removing...' : <><UserMinus aria-hidden="true" /> Remove</>}
                   </button>
                 </article>
               ))}

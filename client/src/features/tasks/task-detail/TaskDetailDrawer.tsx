@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Pencil, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
@@ -118,7 +119,7 @@ export function TaskDetailDrawer({
             onClick={onClose}
             aria-label="Close task details"
           >
-            ×
+            <X aria-hidden="true" />
           </button>
         </div>
 
@@ -192,7 +193,7 @@ export function TaskDetailDrawer({
             >
               <input {...commentForm.register('body')} placeholder="Add a comment..." />
               <button type="submit" className="primary-button" disabled={isCreatingComment}>
-                {isCreatingComment ? 'Sending...' : 'Send'}
+                {isCreatingComment ? 'Sending...' : <><Send aria-hidden="true" /> Send</>}
               </button>
               {commentForm.formState.errors.body ? (
                 <span className="field-error form-wide">
@@ -220,7 +221,7 @@ export function TaskDetailDrawer({
                             commentEditForm.reset({ body: comment.body });
                           }}
                         >
-                          Edit
+                          <Pencil aria-hidden="true" /> Edit
                         </button>
                         <button
                           type="button"
@@ -228,7 +229,7 @@ export function TaskDetailDrawer({
                           onClick={() => void onDeleteComment(comment.id)}
                           disabled={isDeletingComment}
                         >
-                          {isDeletingComment ? 'Deleting...' : 'Delete'}
+                          {isDeletingComment ? 'Deleting...' : <><Trash2 aria-hidden="true" /> Delete</>}
                         </button>
                       </div>
                     </div>

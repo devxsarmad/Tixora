@@ -97,13 +97,7 @@ function isAssistantToolName(value: string): value is ToolName {
 }
 
 function getCurrentDateContext() {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Karachi',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  return 'Current date: ' + formatter.format(new Date()) + ' in Asia/Karachi. Interpret relative dates like today and tomorrow from this date.';
+  return 'Current date: ' + new Date().toISOString().slice(0, 10) + '. Interpret relative dates like tomorrow from this date.';
 }
 
 function withDefaultProjectId(call: AssistantToolCall, projectId?: string): AssistantToolCall {
@@ -165,44 +159,12 @@ function toAssistantHttpError(error: unknown, fallback: string): HttpError {
   );
 }
 
-function extractSearchQuery(query: string) {
-  const cleaned = query
-    .replace(/\b(find|show|search|get|list)\b/gi, ' ')
-    .replace(/\b(tickets?|tasks?)\b/gi, ' ')
-    .replace(/\b(related|matching|about|for|with|in|this|project|scope|called|named)\b/gi, ' ')
-    .replace(/\b(to|or|and|the|a|an)\b/gi, ' ')
-    .replace(/[?.!,]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return cleaned || query.trim();
-}
-
 function buildDeterministicReadToolCall(query: string, projectId?: string): AssistantToolCall | null {
-  const normalized = query.toLowerCase().replace(/[^a-z0-9@._+-]+/g, ' ').trim();
+  const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const mentionsTickets = /\b(task|tasks|ticket|tickets|tikcet|tikcets)\b/.test(normalized);
-  const asksForRead = /\b(which|show|list|find|get|what|summarize|summary|count|total|number|how many)\b/.test(normalized);
+  const asksForList = /\b(which|show|list|find|get|what)\b/.test(normalized);
 
-  if (/\bworkload\b/.test(normalized)) {
-    const emailMatch = query.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-    const memberRefMatch = query.match(/(?:for|of)\s+(.+?)(?:\s+in\s+this\s+project|\s+in\s+the\s+project|\?|$)/i);
-    const asksForEveryMember = /\b(each|every|all)\b.*\b(project member|member|assignee|person|user)s?\b/.test(normalized);
-    const args: Record<string, unknown> = {};
-    if (projectId) args.projectId = projectId;
-    if (!asksForEveryMember) {
-      const userRef = emailMatch?.[0] ?? memberRefMatch?.[1]?.trim();
-      if (userRef && !/^(each|every|all)\b/i.test(userRef)) args.userRef = userRef;
-    }
-
-    return {
-      id: 'direct_' + Date.now(),
-      name: 'summarize_assignee_workload',
-      argumentsText: JSON.stringify(args)
-    };
-  }
-
-  const mentionsStatusFilter = /\b(blocked|done|completed|in progress|progressing|to do|todo|not started|urgent|high priority|medium priority|low priority|overdue|upcoming|unassigned)\b/.test(normalized);
-  if ((!mentionsTickets && !mentionsStatusFilter) || !asksForRead) return null;
+  if (!mentionsTickets || !asksForList) return null;
 
   const args: Record<string, unknown> = {};
   if (projectId) args.projectId = projectId;
@@ -224,88 +186,13 @@ function buildDeterministicReadToolCall(query: string, projectId?: string): Assi
   if (/\boverdue\b/.test(normalized)) args.due = 'overdue';
   if (/\bupcoming\b/.test(normalized)) args.due = 'upcoming';
 
-  const hasStructuredFilter = Object.keys(args).length > (projectId ? 1 : 0);
-  const isSearchIntent = /\b(find|search|related|matching|about)\b/.test(normalized) && !hasStructuredFilter;
-
-  if (isSearchIntent) {
-    return {
-      id: 'direct_' + Date.now(),
-      name: 'search_tasks',
-      argumentsText: JSON.stringify({
-        ...(projectId ? { projectId } : {}),
-        query: extractSearchQuery(query)
-      })
-    };
-  }
-
-  if (!hasStructuredFilter) return null;
+  if (Object.keys(args).length === (projectId ? 1 : 0)) return null;
 
   return {
     id: 'direct_' + Date.now(),
     name: 'list_tasks',
     argumentsText: JSON.stringify(args)
   };
-}
-
-function normalizeRequestedStatus(value: string) {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  if (/^(done|complete|completed|closed|finish|finished)$/.test(normalized)) return 'done';
-  if (/^(blocked|block)$/.test(normalized)) return 'blocked';
-  if (/^(in progress|progress|started|working)$/.test(normalized)) return 'in_progress';
-  if (/^(todo|to do|backlog|open|not started)$/.test(normalized)) return 'todo';
-  return null;
-}
-
-function buildDeterministicWriteToolCall(query: string, projectId?: string): AssistantToolCall | null {
-  const trimmed = query.trim();
-  const lower = trimmed.toLowerCase();
-  const statusPatterns = [
-    /^(?:move|set|change)\s+(?:the\s+)?(?:ticket|task)\s+(.+?)\s+(?:to|as)\s+(todo|to do|in progress|blocked|done|complete|completed|closed)\.?$/i,
-    /^(?:mark|finish|complete)\s+(?:the\s+)?(?:ticket|task)?\s*(.+?)\s+as\s+(todo|to do|in progress|blocked|done|complete|completed|closed)\.?$/i,
-    /^(?:mark|finish|complete)\s+(.+?)\s+(done|complete|completed|closed)\.?$/i
-  ];
-
-  for (const pattern of statusPatterns) {
-    const match = trimmed.match(pattern);
-    if (!match) continue;
-    const taskTitle = match[1]?.trim().replace(/^ticket\s+/i, '').replace(/^task\s+/i, '');
-    const status = normalizeRequestedStatus(match[2] ?? '');
-    if (taskTitle && status) {
-      return {
-        id: 'direct_' + Date.now(),
-        name: 'update_task_status',
-        argumentsText: JSON.stringify({
-          ...(projectId ? { projectId } : {}),
-          taskTitle,
-          status
-        })
-      };
-    }
-  }
-
-  if (/\b(create|add|make|open)\b/.test(lower) && /\b(task|ticket)\b/.test(lower)) {
-    const titleMatch = trimmed.match(/(?:called|named|title)\s+(.+?)(?:\s+with\s+description|\s+description|\s+due|\s+assign|\s+priority|\.|$)/i);
-    const assigneeMatch = trimmed.match(/assign\s+(?:it\s+)?to\s+(.+?)(?:\s+and\s+make|\s+due|\s+priority|\.|$)/i);
-    if (titleMatch?.[1] && assigneeMatch?.[1] && projectId) {
-      const priority = /\burgent\b/i.test(trimmed) ? 'urgent' : /\bhigh\b/i.test(trimmed) ? 'high' : /\blow\b/i.test(trimmed) ? 'low' : /\bmedium\b/i.test(trimmed) ? 'medium' : 'medium';
-      const descriptionMatch = trimmed.match(/description\s+["']?(.+?)["']?(?:\s+assign|\s+due|\s+priority|\.|$)/i);
-      const dueMatch = trimmed.match(/due(?:\s+date)?\s+(?:is\s+|on\s+)?(.+?)(?:\s+assign|\s+priority|\.|$)/i);
-      return {
-        id: 'direct_' + Date.now(),
-        name: 'create_task',
-        argumentsText: JSON.stringify({
-          projectId,
-          title: titleMatch[1].trim(),
-          description: descriptionMatch?.[1]?.trim(),
-          priority,
-          dueAt: dueMatch?.[1]?.trim(),
-          assigneeIds: [assigneeMatch[1].trim()]
-        })
-      };
-    }
-  }
-
-  return null;
 }
 
 function isTaskCountQuestion(query: string) {
@@ -454,14 +341,6 @@ function buildToolSuccessAnswer(toolResults: AssistantToolResult[]) {
   return null;
 }
 
-function cleanToolFailureMessage(value: unknown) {
-  const message = typeof value === 'string' ? value : JSON.stringify(value);
-  return message
-    .replace(/^Invalid tool arguments:\s*/i, '')
-    .replace(/\s+/g, ' ')
-    .trim() || 'The request was not valid.';
-}
-
 function buildToolFailureAnswer(toolResults: AssistantToolResult[]) {
   const failedResults = toolResults.filter((result) => !result.ok);
   if (failedResults.length === 0) return null;
@@ -475,7 +354,7 @@ function buildToolFailureAnswer(toolResults: AssistantToolResult[]) {
         ? 'add the comment'
         : 'run that request';
 
-  return "I couldn't " + action + ': ' + cleanToolFailureMessage(failure.result);
+  return "I couldn't " + action + ': ' + String(failure.result);
 }
 
 function buildFallbackAnswer(chunks: RetrievalChunk[], toolResults: AssistantToolResult[] = []) {
@@ -523,19 +402,6 @@ export async function askAssistant(params: {
     };
   }
 
-  const deterministicWriteCall = buildDeterministicWriteToolCall(params.input.query, params.input.projectId);
-  if (deterministicWriteCall) {
-    const pendingAction = buildPendingAssistantAction(deterministicWriteCall);
-    storePendingActions({ userId: params.userId, orgId: scope.orgId, actions: [pendingAction] });
-
-    return {
-      answer: 'Review and confirm this action before I run it.',
-      toolResults: [],
-      pendingActions: [pendingAction],
-      sources: []
-    };
-  }
-
   if (isTaskCountQuestion(params.input.query)) {
     const counts = await countAccessibleTasks({
       userId: params.userId,
@@ -552,7 +418,7 @@ export async function askAssistant(params: {
   }
 
   let chunks: RetrievalChunk[] = [];
-
+  
   try {
     chunks = await retrieveRelevantChunks({
       query: params.input.query,
@@ -599,34 +465,18 @@ export async function askAssistant(params: {
   const mutatingToolCalls = toolCalls.filter((call) => isMutatingAssistantTool(call.name));
   const nonMutatingToolCalls = toolCalls.filter((call) => !isMutatingAssistantTool(call.name));
 
-  const pendingActions: PendingAssistantAction[] = [];
-  const invalidPendingResults: AssistantToolResult[] = [];
-  for (const call of mutatingToolCalls) {
-    try {
-      pendingActions.push(buildPendingAssistantAction(call));
-    } catch (error) {
-      invalidPendingResults.push({
-        toolCallId: call.id,
-        toolName: call.name,
-        ok: false,
-        result: error instanceof Error ? error.message : 'Invalid action details'
-      });
-    }
-  }
+  const pendingActions = mutatingToolCalls.map((call) => buildPendingAssistantAction(call));
   storePendingActions({ userId: params.userId, orgId: scope.orgId, actions: pendingActions });
 
-  const toolResults = [
-    ...invalidPendingResults,
-    ...await Promise.all(
-      nonMutatingToolCalls.map((call) =>
-        executeAssistantToolCall({
-          call,
-          userId: params.userId,
-          orgId: scope.orgId
-        })
-      )
+  const toolResults = await Promise.all(
+    nonMutatingToolCalls.map((call) =>
+      executeAssistantToolCall({
+        call,
+        userId: params.userId,
+        orgId: scope.orgId
+      })
     )
-  ];
+  );
 
   if (pendingActions.length > 0) {
     return {

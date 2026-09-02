@@ -2,6 +2,7 @@
 // Main authenticated workspace UI. Server state is loaded through feature-scoped
 // React Query hooks while this screen composes the workspace experience.
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Settings } from 'lucide-react';
 import React, {
   type FormEvent,
   useEffect,
@@ -13,6 +14,7 @@ import { Toast } from '../../components/shared/Toast.js';
 import { ActivityView } from '../activity/ActivityView.js';
 import { AskTixoraPanel } from '../assistant/AskTixoraPanel.js';
 import { CalendarView } from '../calendar/CalendarView.js';
+import { SettingsView, type SettingsSection } from '../settings/SettingsView.js';
 import { MyTasksView } from '../tasks/my-tasks/MyTasksView.js';
 import { WorkspaceSidebar } from './WorkspaceSidebar.js';
 import type { WorkspaceView } from './workspaceView.js';
@@ -32,7 +34,6 @@ import {
   getInitials,
   toApiDateTime
 } from '../../lib/formatters.js';
-import { OrgMembersModal } from '../organizations/OrgMembersModal.js';
 import {
   useAddOrganizationMember,
   useCreateInvitation,
@@ -43,7 +44,6 @@ import {
   useRemoveOrganizationMember,
   useUpdateOrganizationMember
 } from '../organizations/hooks.js';
-import { ProjectSettingsModal } from '../projects/ProjectSettingsModal.js';
 import {
   useArchiveProject,
   useCreateProject,
@@ -96,7 +96,7 @@ const statusLabels: Record<TaskSummary['status'], string> = {
   blocked: 'Blocked',
   done: 'Done'
 };
-const workspaceViews: WorkspaceView[] = ['board', 'my-tasks', 'calendar', 'activity', 'ask'];
+const workspaceViews: WorkspaceView[] = ['board', 'my-tasks', 'calendar', 'activity', 'ask', 'settings'];
 
 function parseWorkspacePath(pathname: string): WorkspaceView {
   const view = pathname.replace(/^\//, '') || 'board';
@@ -124,10 +124,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isTaskDetailsOpen, setIsTaskDetailsOpen] = useState(false);
-  const [isProjectToolsOpen, setIsProjectToolsOpen] = useState(false);
-  const [isTeamMembersOpen, setIsTeamMembersOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('profile');
   const [isOrgSwitcherOpen, setIsOrgSwitcherOpen] = useState(false);
-  const [projectSettingsTab, setProjectSettingsTab] = useState<'general' | 'members'>('general');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(entryPoint !== 'register');
   const [workspaceName, setWorkspaceName] = useState('');
@@ -484,7 +482,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         )
       );
       showToast(emails.length === 1 ? 'Organization member added.' : emails.length + ' organization members added.');
-      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization member update failed', memberError);
     }
@@ -500,7 +497,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setError(null);
       await createInvitationMutation.mutateAsync({ email, role });
       showToast('Invitation sent.');
-      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization user update failed', memberError);
     }
@@ -516,7 +512,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setError(null);
       await updateOrganizationMemberMutation.mutateAsync({ userId, role });
       showToast('Organization role updated.');
-      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization member role update failed', memberError);
     }
@@ -529,7 +524,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setError(null);
       await removeOrganizationMemberMutation.mutateAsync(userId);
       showToast('Organization member removed.');
-      setIsTeamMembersOpen(false);
     } catch (memberError) {
       showError('Organization member remove failed', memberError);
     }
@@ -552,7 +546,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         )
       );
       showToast(userIds.length === 1 ? 'Project member added.' : userIds.length + ' project members added.');
-      setIsProjectToolsOpen(false);
     } catch (memberError) {
       showError('Project member update failed', memberError);
     }
@@ -568,7 +561,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setError(null);
       await upsertProjectMemberMutation.mutateAsync({ userId, role });
       showToast('Project role updated.');
-      setIsProjectToolsOpen(false);
     } catch (memberError) {
       showError('Project member role update failed', memberError);
     }
@@ -581,7 +573,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
       setError(null);
       await removeProjectMemberMutation.mutateAsync(userId);
       showToast('Project member removed.');
-      setIsProjectToolsOpen(false);
     } catch (memberError) {
       showError('Project member remove failed', memberError);
     }
@@ -597,7 +588,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         description: values.description?.trim() || null
       });
       showToast('Project saved.');
-      setIsProjectToolsOpen(false);
     } catch (updateError) {
       showError('Project update failed', updateError);
     }
@@ -617,7 +607,6 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         return nextProject?.id ?? null;
       });
       showToast('Project archived.');
-      setIsProjectToolsOpen(false);
     } catch (archiveError) {
       showError('Project archive failed', archiveError);
     }
@@ -765,9 +754,19 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   );
 
 
+  function openOrganizationSettings() {
+    setSettingsSection('organization');
+    navigateWorkspace('settings');
+  }
+
   function openProjectMembersSettings() {
-    setProjectSettingsTab('members');
-    setIsProjectToolsOpen(true);
+    setSettingsSection('project');
+    navigateWorkspace('settings');
+  }
+
+  function openProjectGeneralSettings() {
+    setSettingsSection('project');
+    navigateWorkspace('settings');
   }
 
 
@@ -794,6 +793,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         isCollapsed={isSidebarCollapsed}
         isOrgSwitcherOpen={isOrgSwitcherOpen}
         activeView={activeView}
+        activeSettingsSection={settingsSection}
         onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
         onToggleOrgSwitcher={() => setIsOrgSwitcherOpen((current) => !current)}
         onSelectOrganization={(slug) => {
@@ -821,11 +821,12 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
           navigateWorkspace('board');
         }}
         onSelectView={(view) => {
+          if (view === 'settings') setSettingsSection('profile');
           setActiveView(view);
           setSelectedTaskId(null);
           navigateWorkspace(view);
         }}
-        onOpenOrganizationMembers={() => setIsTeamMembersOpen(true)}
+        onOpenOrganizationMembers={openOrganizationSettings}
         onOpenProjectMembers={openProjectMembersSettings}
         onLogout={onLogout}
       />
@@ -972,14 +973,13 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                 </div>
                 <button
                   type="button"
-                  className="ghost-button"
+                  className="icon-button !h-[38px] !min-h-[38px] !w-[38px] !p-0 !text-base"
                   disabled={!selectedProject}
-                  onClick={() => {
-                    setProjectSettingsTab('general');
-                    setIsProjectToolsOpen(true);
-                  }}
+                  onClick={openProjectGeneralSettings}
+                  aria-label="Project settings"
+                  title="Project settings"
                 >
-                  Project settings
+                  <Settings aria-hidden="true" />
                 </button>
                 <button
                   type="button"
@@ -987,7 +987,8 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                   disabled={!selectedProject}
                   onClick={() => setIsTaskFormOpen(true)}
                 >
-                  + Create task
+                  <Plus aria-hidden="true" />
+                  Create task
                 </button>
               </div>
             </header>
@@ -1053,7 +1054,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                       <button
                         type="button"
                         className="ghost-button equal-cta"
-                        onClick={() => setIsTeamMembersOpen(true)}
+                        onClick={openOrganizationSettings}
                       >
                         Invite your team
                       </button>
@@ -1122,6 +1123,34 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                 onOpenTask={openTaskDetails}
               />
             ) : null}
+
+            {activeView === 'settings' ? (
+              <SettingsView
+                session={session}
+                activeSection={settingsSection}
+                token={session.accessToken}
+                team={teamDetail}
+                project={selectedProject}
+                projectDetail={projectDetail}
+                workspaceMembers={workspaceMembers}
+                projectMembers={projectMembers}
+                invitations={invitations}
+                isSavingOrganizationMembers={isSavingOrganizationMembers}
+                isSavingProject={isSavingProject}
+                isArchivingProject={isArchivingProject}
+                isSavingProjectMembers={isSavingProjectMembers}
+                onSectionChange={setSettingsSection}
+                onAddMembers={handleAddOrganizationMembers}
+                onInviteMember={handleInviteOrganizationMember}
+                onOrganizationRoleChange={handleTeamRoleChange}
+                onRemoveOrganizationMember={handleRemoveTeamMember}
+                onUpdateProject={handleUpdateProject}
+                onArchiveProject={handleArchiveProject}
+                onAddProjectMembers={handleAddProjectMembers}
+                onProjectRoleChange={handleProjectRoleChange}
+                onRemoveProjectMember={handleRemoveProjectMember}
+              />
+            ) : null}
           </>
         )}
       </section>
@@ -1140,7 +1169,7 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         }}
         onAddOrganizationMember={() => {
           setIsTaskFormOpen(false);
-          setIsTeamMembersOpen(true);
+          openOrganizationSettings();
         }}
       />
 
@@ -1170,39 +1199,10 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
         }}
         onAddOrganizationMember={() => {
           setIsTaskDetailsOpen(false);
-          setIsTeamMembersOpen(true);
+          openOrganizationSettings();
         }}
       />
 
-      <ProjectSettingsModal
-        isOpen={isProjectToolsOpen}
-        initialTab={projectSettingsTab}
-        project={selectedProject}
-        workspaceMembers={workspaceMembers}
-        projectMembers={projectMembers}
-        isSavingProject={isSavingProject}
-        isArchivingProject={isArchivingProject}
-        isSavingMembers={isSavingProjectMembers}
-        onClose={() => setIsProjectToolsOpen(false)}
-        onUpdateProject={handleUpdateProject}
-        onArchiveProject={handleArchiveProject}
-        onAddProjectMembers={handleAddProjectMembers}
-        onProjectRoleChange={handleProjectRoleChange}
-        onRemoveProjectMember={handleRemoveProjectMember}
-      />
-      <OrgMembersModal
-        isOpen={isTeamMembersOpen}
-        token={session.accessToken}
-        team={teamDetail}
-        members={workspaceMembers}
-        invitations={invitations}
-        isSaving={isSavingOrganizationMembers}
-        onClose={() => setIsTeamMembersOpen(false)}
-        onAddMembers={handleAddOrganizationMembers}
-        onInviteMember={handleInviteOrganizationMember}
-        onRoleChange={handleTeamRoleChange}
-        onRemoveMember={handleRemoveTeamMember}
-      />
       <Toast message={toast?.message ?? null} tone={toast?.tone} />
     </main>
   );

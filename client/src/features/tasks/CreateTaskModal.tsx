@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import type { ProjectMember } from '../projects/types.js';
 import type { TaskSummary } from './types.js';
@@ -61,7 +62,7 @@ export function CreateTaskModal({
             disabled={isSubmitting}
             aria-label="Close create task"
           >
-            ×
+            <X aria-hidden="true" />
           </button>
         </div>
         <form
