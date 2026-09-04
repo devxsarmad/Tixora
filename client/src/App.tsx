@@ -65,8 +65,13 @@ export function App() {
     navigateTo('/login', true);
   }
 
-  function handleLogout() {
-    endSession();
+  function updateSession(nextSession: AuthResponse) {
+    saveSession(nextSession);
+    setSession(nextSession);
+  }
+
+  function handleLogout(message?: string) {
+    endSession(typeof message === 'string' ? message : undefined);
   }
 
   useEffect(() => {
@@ -111,6 +116,7 @@ export function App() {
         session={session}
         entryPoint={authEntryPoint}
         onLogout={handleLogout}
+        onSessionChange={updateSession}
       />
     );
   }

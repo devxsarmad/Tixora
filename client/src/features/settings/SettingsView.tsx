@@ -3,6 +3,7 @@ import { Camera, KeyRound, LogOut, Mail, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { InviteRow } from '../../components/members/InviteRow.js';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog.js';
 import { UserSearchInput } from '../../components/members/UserSearchInput.js';
 import { formatTimestamp, getInitials } from '../../lib/formatters.js';
 import { isValidEmail } from '../../lib/validators.js';
@@ -14,6 +15,8 @@ import type { AuthResponse } from '../auth/types.js';
 
 export type SettingsSection = 'profile' | 'organization' | 'project';
 type OrgRole = 'admin' | 'member';
+type ProfileUpdateInput = { displayName?: string; email?: string };
+type PasswordUpdateInput = { currentPassword: string; newPassword: string };
 
 const settingsCardClass = 'grid gap-4 rounded-card border border-border bg-surface p-5 shadow-card';
 const settingsCardHeadingClass = '[&_h2]:m-0 [&_h2]:font-heading [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:tracking-[-0.012em] [&_h2]:text-text-primary [&_p]:mt-1 [&_p]:mb-0 [&_p]:text-[13px] [&_p]:text-text-muted';
@@ -76,7 +79,15 @@ type SettingsViewProps = {
   isSavingProject?: boolean;
   isArchivingProject?: boolean;
   isSavingProjectMembers?: boolean;
+  isUpdatingProfile?: boolean;
+  isChangingPassword?: boolean;
+  isLeavingOrganization?: boolean;
+  isDeletingAccount?: boolean;
   onSectionChange: (section: SettingsSection) => void;
+  onUpdateProfile: (input: ProfileUpdateInput) => Promise<boolean | void> | boolean | void;
+  onChangePassword: (input: PasswordUpdateInput) => Promise<boolean | void> | boolean | void;
+  onLeaveOrganization: () => Promise<boolean | void> | boolean | void;
+  onDeleteAccount: () => Promise<boolean | void> | boolean | void;
   onAddMembers: (emails: string[], role: OrgRole) => Promise<void> | void;
   onInviteMember: (email: string, role: OrgRole) => Promise<void> | void;
   onOrganizationRoleChange: (userId: string, role: OrgRole) => Promise<void> | void;
@@ -102,7 +113,15 @@ export function SettingsView({
   isSavingProject = false,
   isArchivingProject = false,
   isSavingProjectMembers = false,
+  isUpdatingProfile = false,
+  isChangingPassword = false,
+  isLeavingOrganization = false,
+  isDeletingAccount = false,
   onSectionChange,
+  onUpdateProfile,
+  onChangePassword,
+  onLeaveOrganization,
+  onDeleteAccount,
   onAddMembers,
   onInviteMember,
   onOrganizationRoleChange,
@@ -129,6 +148,9 @@ export function SettingsView({
   });
   const [profileDraft, setProfileDraft] = useState(savedProfile);
   const [editingProfileField, setEditingProfileField] = useState<'displayName' | 'email' | null>(null);
+  const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'leave-organization' | 'delete-account' | null>(null);
   const userDirectoryQuery = useUserSearch(token, debouncedDirectorySearch);
   const userDirectoryResults = debouncedDirectorySearch.trim() ? userDirectoryQuery.data?.users ?? [] : [];
   const projectEditForm = useForm<ProjectEditFormValues>({
@@ -194,6 +216,7 @@ export function SettingsView({
     : editingProfileField === 'email'
       ? isValidEmail(profileDraft.email.trim()) && profileDraft.email.trim().toLowerCase() !== savedProfile.email.toLowerCase()
       : false;
+  const canChangePassword = passwordDraft.currentPassword.length > 0 && passwordDraft.newPassword.length >= 8 && passwordDraft.newPassword === passwordDraft.confirmPassword;
 
   async function submitOrganizationMembers(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -232,13 +255,52 @@ export function SettingsView({
     event.target.value = '';
   }
 
-  function saveProfileField() {
-    if (!editingProfileField || !canSaveProfileField) return;
+  async function saveProfileField() {
+    if (!editingProfileField || !canSaveProfileField || isUpdatingProfile) return;
+
+    const updateInput = editingProfileField === 'displayName'
+      ? { displayName: profileDraft.displayName.trim() }
+      : { email: profileDraft.email.trim() };
+    const didSave = await onUpdateProfile(updateInput);
+
+    if (didSave === false) return;
+
     setSavedProfile({
-      displayName: profileDraft.displayName.trim(),
-      email: profileDraft.email.trim()
+      displayName: editingProfileField === 'displayName' ? profileDraft.displayName.trim() : savedProfile.displayName,
+      email: editingProfileField === 'email' ? profileDraft.email.trim() : savedProfile.email
     });
     setEditingProfileField(null);
+  }
+
+  async function submitPasswordChange(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canChangePassword || isChangingPassword) return;
+
+    const didChange = await onChangePassword({
+      currentPassword: passwordDraft.currentPassword,
+      newPassword: passwordDraft.newPassword
+    });
+
+    if (didChange === false) return;
+
+    setPasswordDraft({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setIsPasswordFormOpen(false);
+  }
+
+  async function confirmDangerAction() {
+    if (!confirmAction) return;
+
+    const didRun = confirmAction === 'leave-organization'
+      ? await onLeaveOrganization()
+      : await onDeleteAccount();
+
+    if (didRun === false) return;
+    setConfirmAction(null);
+  }
+
+  function cancelPasswordChange() {
+    setPasswordDraft({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setIsPasswordFormOpen(false);
   }
 
   function cancelProfileEdit() {
@@ -247,7 +309,8 @@ export function SettingsView({
   }
 
   return (
-    <section className="grid min-h-0 gap-5">
+    <>
+      <section className="grid min-h-0 gap-5">
       <header className="flex items-end justify-between gap-4">
         <div>
           <p className={kickerClass}>Settings</p>
@@ -309,7 +372,7 @@ export function SettingsView({
                     <div className={profileFieldHeaderClass}>
                       <span className={profileLabelClass}>Full name</span>
                       {editingProfileField !== 'displayName' ? (
-                        <button type="button" className={inlineActionClass} onClick={() => setEditingProfileField('displayName')}><Pencil aria-hidden="true" /> Edit</button>
+                        <button type="button" className={inlineActionClass} disabled={isUpdatingProfile} onClick={() => setEditingProfileField('displayName')}><Pencil aria-hidden="true" /> Edit</button>
                       ) : null}
                     </div>
                     <input
@@ -320,7 +383,7 @@ export function SettingsView({
                     />
                     {editingProfileField === 'displayName' ? (
                       <div className="flex flex-wrap gap-2">
-                        <button type="button" className={primaryButtonClass} disabled={!canSaveProfileField} onClick={saveProfileField}>Save</button>
+                        <button type="button" className={primaryButtonClass} disabled={!canSaveProfileField || isUpdatingProfile} onClick={() => void saveProfileField()}>{isUpdatingProfile ? 'Saving...' : 'Save'}</button>
                         <button type="button" className={ghostButtonClass} onClick={cancelProfileEdit}>Cancel</button>
                       </div>
                     ) : null}
@@ -330,7 +393,7 @@ export function SettingsView({
                     <div className={profileFieldHeaderClass}>
                       <span className={profileLabelClass}>Email</span>
                       {editingProfileField !== 'email' ? (
-                        <button type="button" className={inlineActionClass} onClick={() => setEditingProfileField('email')}><Pencil aria-hidden="true" /> Edit</button>
+                        <button type="button" className={inlineActionClass} disabled={isUpdatingProfile} onClick={() => setEditingProfileField('email')}><Pencil aria-hidden="true" /> Edit</button>
                       ) : null}
                     </div>
                     <input
@@ -345,7 +408,7 @@ export function SettingsView({
                     ) : null}
                     {editingProfileField === 'email' ? (
                       <div className="flex flex-wrap gap-2">
-                        <button type="button" className={primaryButtonClass} disabled={!canSaveProfileField} onClick={saveProfileField}>Save</button>
+                        <button type="button" className={primaryButtonClass} disabled={!canSaveProfileField || isUpdatingProfile} onClick={() => void saveProfileField()}>{isUpdatingProfile ? 'Saving...' : 'Save'}</button>
                         <button type="button" className={ghostButtonClass} onClick={cancelProfileEdit}>Cancel</button>
                       </div>
                     ) : null}
@@ -379,10 +442,52 @@ export function SettingsView({
                     <h2 className="m-0 font-heading text-[15px] font-semibold tracking-[-0.012em] text-[var(--color-danger)]">Danger zone</h2>
                     <p className={dangerTextClass}>Security and account-level actions should be handled carefully.</p>
                   </div>
+                  {isPasswordFormOpen ? (
+                    <form className="grid max-w-[520px] gap-2.5 rounded-card border border-border bg-surface p-3" onSubmit={(event) => void submitPasswordChange(event)}>
+                      <label>
+                        Current password
+                        <input
+                          className={nativeInputClass}
+                          type="password"
+                          value={passwordDraft.currentPassword}
+                          onChange={(event) => setPasswordDraft((current) => ({ ...current, currentPassword: event.target.value }))}
+                          placeholder="Current password"
+                        />
+                      </label>
+                      <label>
+                        New password
+                        <input
+                          className={nativeInputClass}
+                          type="password"
+                          value={passwordDraft.newPassword}
+                          onChange={(event) => setPasswordDraft((current) => ({ ...current, newPassword: event.target.value }))}
+                          placeholder="At least 8 characters"
+                        />
+                      </label>
+                      <label>
+                        Confirm new password
+                        <input
+                          className={nativeInputClass}
+                          type="password"
+                          value={passwordDraft.confirmPassword}
+                          onChange={(event) => setPasswordDraft((current) => ({ ...current, confirmPassword: event.target.value }))}
+                          placeholder="Repeat new password"
+                          aria-invalid={Boolean(passwordDraft.confirmPassword) && passwordDraft.newPassword !== passwordDraft.confirmPassword}
+                        />
+                      </label>
+                      {passwordDraft.confirmPassword && passwordDraft.newPassword !== passwordDraft.confirmPassword ? (
+                        <span className={fieldErrorClass}>Passwords do not match.</span>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        <button type="submit" className={primaryButtonClass} disabled={!canChangePassword || isChangingPassword}>{isChangingPassword ? 'Changing...' : 'Save password'}</button>
+                        <button type="button" className={ghostButtonClass} disabled={isChangingPassword} onClick={cancelPasswordChange}>Cancel</button>
+                      </div>
+                    </form>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" className={ghostButtonClass}><KeyRound aria-hidden="true" /> Change password</button>
-                    <button type="button" className={dangerButtonClass}><LogOut aria-hidden="true" /> Leave organization</button>
-                    <button type="button" className={dangerButtonClass}><Trash2 aria-hidden="true" /> Delete account</button>
+                    <button type="button" className={ghostButtonClass} disabled={isChangingPassword} onClick={() => setIsPasswordFormOpen(true)}><KeyRound aria-hidden="true" /> Change password</button>
+                    <button type="button" className={dangerButtonClass} disabled={!team || isLeavingOrganization} onClick={() => setConfirmAction('leave-organization')}><LogOut aria-hidden="true" /> {isLeavingOrganization ? 'Leaving...' : 'Leave organization'}</button>
+                    <button type="button" className={dangerButtonClass} disabled={isDeletingAccount} onClick={() => setConfirmAction('delete-account')}><Trash2 aria-hidden="true" /> {isDeletingAccount ? 'Deleting...' : 'Delete account'}</button>
                   </div>
                 </section>
               </div>
@@ -546,6 +651,17 @@ export function SettingsView({
           ) : null}
         </div>
       </div>
-    </section>
+      </section>
+      {confirmAction ? (
+        <ConfirmDialog
+          title={confirmAction === 'leave-organization' ? 'Leave organization?' : 'Delete account?'}
+          body={confirmAction === 'leave-organization'
+            ? 'You will lose access to this organization and its projects. This cannot be undone from here.'
+            : 'Your account will be deactivated and you will be signed out. Historical comments and task activity will remain for audit history.'}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={() => void confirmDangerAction()}
+        />
+      ) : null}
+    </>
   );
 }

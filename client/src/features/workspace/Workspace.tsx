@@ -11,6 +11,12 @@ import React, {
 } from 'react';
 import { useForm } from 'react-hook-form';
 import { Toast } from '../../components/shared/Toast.js';
+import {
+  useChangePassword,
+  useDeleteAccount,
+  useLeaveOrganization,
+  useUpdateProfile
+} from '../account/hooks.js';
 import { ActivityView } from '../activity/ActivityView.js';
 import { AskTixoraPanel } from '../assistant/AskTixoraPanel.js';
 import { CalendarView } from '../calendar/CalendarView.js';
@@ -80,7 +86,8 @@ import type {
 type WorkspaceProps = {
   session: AuthResponse;
   entryPoint: 'login' | 'register' | 'restored';
-  onLogout: () => void;
+  onLogout: (message?: string) => void;
+  onSessionChange: (session: AuthResponse) => void;
 };
 
 const priorityLabels: Record<TaskSummary['priority'], string> = {
@@ -113,7 +120,7 @@ function updateBrowserPath(pathname: string, replace = false) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
+export function Workspace({ session, entryPoint, onLogout, onSessionChange }: WorkspaceProps) {
   const initialView = parseWorkspacePath(window.location.pathname);
   const [routePath, setRoutePath] = useState(() => window.location.pathname);
   const [selectedTeamSlug, setSelectedTeamSlug] = useState<string | null>(null);
@@ -235,6 +242,13 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     session.accessToken,
     selectedTaskId
   );
+  const updateProfileMutation = useUpdateProfile(session.accessToken);
+  const changePasswordMutation = useChangePassword(session.accessToken);
+  const leaveOrganizationMutation = useLeaveOrganization(
+    session.accessToken,
+    selectedTeamSlug
+  );
+  const deleteAccountMutation = useDeleteAccount(session.accessToken);
 
   const isCreatingOrganization = createOrganizationMutation.isPending;
   const isCreatingProject = createProjectMutation.isPending;
@@ -252,6 +266,10 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
   const isCreatingComment = createCommentMutation.isPending;
   const isUpdatingComment = updateCommentMutation.isPending;
   const isDeletingComment = deleteCommentMutation.isPending;
+  const isUpdatingProfile = updateProfileMutation.isPending;
+  const isChangingPassword = changePasswordMutation.isPending;
+  const isLeavingOrganization = leaveOrganizationMutation.isPending;
+  const isDeletingAccount = deleteAccountMutation.isPending;
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.slug === selectedTeamSlug) ?? null,
@@ -325,6 +343,66 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
     const message = caught instanceof Error ? caught.message : fallback;
     setError(message);
     showToast(message, 'error');
+  }
+
+  async function handleUpdateProfile(input: { displayName?: string; email?: string }) {
+    try {
+      setError(null);
+      const response = await updateProfileMutation.mutateAsync(input);
+      onSessionChange({
+        ...session,
+        user: response.user
+      });
+      showToast('Profile updated.');
+      return true;
+    } catch (profileError) {
+      showError('Profile update failed', profileError);
+      return false;
+    }
+  }
+
+  async function handleChangePassword(input: { currentPassword: string; newPassword: string }) {
+    try {
+      setError(null);
+      await changePasswordMutation.mutateAsync(input);
+      showToast('Password changed.');
+      return true;
+    } catch (passwordError) {
+      showError('Password change failed', passwordError);
+      return false;
+    }
+  }
+
+  async function handleLeaveOrganization() {
+    if (!selectedTeamSlug) return false;
+
+    try {
+      setError(null);
+      const leavingSlug = selectedTeamSlug;
+      await leaveOrganizationMutation.mutateAsync();
+      setSelectedTeamSlug((currentSlug) => currentSlug === leavingSlug ? null : currentSlug);
+      setSelectedProjectId(null);
+      setSelectedTaskId(null);
+      setSettingsSection('profile');
+      navigateWorkspace('board');
+      showToast('You left the organization.');
+      return true;
+    } catch (leaveError) {
+      showError('Leave organization failed', leaveError);
+      return false;
+    }
+  }
+
+  async function handleDeleteAccount() {
+    try {
+      setError(null);
+      await deleteAccountMutation.mutateAsync();
+      onLogout('Account deleted.');
+      return true;
+    } catch (deleteError) {
+      showError('Delete account failed', deleteError);
+      return false;
+    }
   }
 
   useEffect(() => {
@@ -1139,11 +1217,19 @@ export function Workspace({ session, entryPoint, onLogout }: WorkspaceProps) {
                 isSavingProject={isSavingProject}
                 isArchivingProject={isArchivingProject}
                 isSavingProjectMembers={isSavingProjectMembers}
+                isUpdatingProfile={isUpdatingProfile}
+                isChangingPassword={isChangingPassword}
+                isLeavingOrganization={isLeavingOrganization}
+                isDeletingAccount={isDeletingAccount}
                 onSectionChange={setSettingsSection}
                 onAddMembers={handleAddOrganizationMembers}
                 onInviteMember={handleInviteOrganizationMember}
                 onOrganizationRoleChange={handleTeamRoleChange}
                 onRemoveOrganizationMember={handleRemoveTeamMember}
+                onUpdateProfile={handleUpdateProfile}
+                onChangePassword={handleChangePassword}
+                onLeaveOrganization={handleLeaveOrganization}
+                onDeleteAccount={handleDeleteAccount}
                 onUpdateProject={handleUpdateProject}
                 onArchiveProject={handleArchiveProject}
                 onAddProjectMembers={handleAddProjectMembers}

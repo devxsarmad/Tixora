@@ -150,7 +150,7 @@ export function WorkspaceSidebar({
           <strong>{session.user.displayName}</strong>
           <p>{session.user.email}</p>
         </div>
-        <button type="button" className="icon-button" onClick={onLogout} aria-label="Log out"><LogOut aria-hidden="true" /></button>
+        <button type="button" className="icon-button" onClick={() => onLogout()} aria-label="Log out"><LogOut aria-hidden="true" /></button>
       </div>
     </aside>
   );

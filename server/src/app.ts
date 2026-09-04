@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import { env } from './config/env.js';
 import { query } from './db/pool.js';
 import { assistantRouter } from './features/assistant/assistant.routes.js';
+import { accountRouter } from './features/account/account.routes.js';
 import { authRouter } from './features/auth/auth.routes.js';
 import { commentRouter } from './features/comments/comment.routes.js';
 import { invitationRouter } from './features/invitations/invitation.routes.js';
@@ -48,6 +49,7 @@ export function createApp() {
   });
 
   app.use('/api/auth', authRouter);
+  app.use('/api', accountRouter);
   app.use('/api', assistantRouter);
   app.use('/api', commentRouter);
   app.use('/api', invitationRouter);

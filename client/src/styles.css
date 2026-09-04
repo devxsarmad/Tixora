@@ -1901,6 +1901,41 @@ label {
   background: rgba(16, 24, 40, 0.38);
 }
 
+.confirm-dialog {
+  width: min(480px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-drawer);
+}
+
+.confirm-dialog h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  color: var(--text-primary);
+}
+
+.confirm-dialog p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.confirm-dialog .modal-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+
 .drawer-backdrop {
   position: fixed;
   z-index: 50;
