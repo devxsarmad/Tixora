@@ -68,6 +68,7 @@ export async function createProject(params: {
       teamSlug: params.teamSlug,
       userId: params.userId,
       name: params.input.name,
+      memberIds: params.input.memberIds,
       description: params.input.description
     });
 

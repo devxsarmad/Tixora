@@ -108,7 +108,7 @@ export function WorkspaceSidebar({
           <button
             type="button"
             className="icon-button"
-            disabled={!selectedTeamSlug}
+            disabled={!selectedTeamSlug || (teamDetail?.role !== 'owner' && teamDetail?.role !== 'admin')}
             onClick={onToggleProjectForm}
             aria-label="Create project"
           >

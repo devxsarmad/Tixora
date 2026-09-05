@@ -6,7 +6,9 @@ import { z } from 'zod';
 
 export const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  description: z.string().trim().max(2000).optional()
+  description: z.string().trim().max(2000).optional(),
+  memberIds: z.array(z.string().uuid()).min(1, 'Select at least one project member.').max(100)
+    .refine((ids) => new Set(ids).size === ids.length, 'Select each member only once.')
 });
 
 export const updateProjectSchema = z

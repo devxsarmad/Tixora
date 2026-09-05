@@ -68,6 +68,10 @@ export function CreateTaskModal({
         <form
           className="modal-form"
           onSubmit={taskForm.handleSubmit(async (values) => {
+            if (values.assigneeIds.some((id) => !projectMembers.some((member) => member.id === id))) {
+              taskForm.setError('assigneeIds', { message: 'A selected member is no longer in this project. Update the assignees.' });
+              return;
+            }
             const didSubmit = await onSubmit(values);
             if (didSubmit !== false) {
               taskForm.reset({
@@ -129,7 +133,7 @@ export function CreateTaskModal({
             <button type="button" className="ghost-button" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
-            <button type="submit" className="primary-button" disabled={isSubmitting}>
+            <button type="submit" className="primary-button" disabled={isSubmitting || projectMembers.length === 0}>
               {isSubmitting ? 'Creating...' : 'Create task'}
             </button>
           </div>

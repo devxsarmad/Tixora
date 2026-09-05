@@ -40,7 +40,7 @@ export function useCreateOrganization() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { name: string }) => organizationsApi.createOrganization(input),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: organizationKeys.all }); }
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: organizationKeys.all })
   });
 }
 

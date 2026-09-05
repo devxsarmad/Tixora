@@ -17,7 +17,7 @@ export function useProject(projectId: string | null) {
 
 export function useCreateProject(orgSlug: string | null, includeArchived = false) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (input: { name: string; description?: string }) => projectsApi.createProject(orgSlug ?? '', input), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
+  return useMutation({ mutationFn: (input: { name: string; description?: string; memberIds: string[] }) => projectsApi.createProject(orgSlug ?? '', input), onSuccess: () => queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }) });
 }
 
 export function useUpdateProject(projectId: string | null, orgSlug: string | null, includeArchived = false) {
@@ -27,7 +27,7 @@ export function useUpdateProject(projectId: string | null, orgSlug: string | nul
 
 export function useArchiveProject(projectId: string | null, orgSlug: string | null, includeArchived = false) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: () => projectsApi.archiveProject(projectId ?? ''), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
+  return useMutation({ mutationFn: () => projectsApi.archiveProject(projectId ?? ''), onSuccess: () => queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }) });
 }
 
 export function useUpsertProjectMember(projectId: string | null) {

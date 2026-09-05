@@ -51,6 +51,7 @@ Organization membership and project membership are separate layers:
 - Organization onboarding and workspace routing
 - Organization member management
 - Project list, create, edit, archive, and project access management
+- Guided organization → members → project setup, with required project-member selection
 - Task board with create, edit, status updates, filters, drag/drop, assignees, and comments
 - Calendar and activity views mapped from project tasks
 - Ask Tixora assistant panel
@@ -185,6 +186,17 @@ Seed login:
 email: owner@teamtask.dev
 password: Password123!
 ```
+
+## Workspace flow
+
+Project creation requires a `memberIds` array containing at least one current
+organization member. The creator is also added as project manager; other selected
+members join as contributors. Project creation and membership are saved together
+in one transaction. Task assignees are selected from these project members.
+
+Workspace content waits for the required organization, project, and task queries
+before showing setup, an empty board, or existing tickets. Failed initial loads
+show a retry state instead of being interpreted as an empty workspace.
 
 ## Ask Tixora
 

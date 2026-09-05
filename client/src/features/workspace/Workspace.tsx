@@ -2,7 +2,7 @@
 // Main authenticated workspace UI. Server state is loaded through feature-scoped
 // React Query hooks while this screen composes the workspace experience.
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Settings } from 'lucide-react';
+import { ArrowRight, Building2, Check, FolderKanban, Plus, Settings } from 'lucide-react';
 import React, {
   type FormEvent,
   useEffect,
@@ -22,6 +22,9 @@ import { AskTixoraPanel } from '../assistant/AskTixoraPanel.js';
 import { CalendarView } from '../calendar/CalendarView.js';
 import { SettingsView, type SettingsSection } from '../settings/SettingsView.js';
 import { MyTasksView } from '../tasks/my-tasks/MyTasksView.js';
+import './onboarding.css';
+import { OrganizationMembersStep } from '../organizations/OrganizationMembersStep.js';
+import { ProjectCreationForm } from '../projects/ProjectCreationForm.js';
 import { WorkspaceSidebar } from './WorkspaceSidebar.js';
 import type { WorkspaceView } from './workspaceView.js';
 import type { AuthResponse } from '../auth/types.js';
@@ -120,13 +123,14 @@ function updateBrowserPath(pathname: string, replace = false) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-export function Workspace({ session, entryPoint, onLogout, onSessionChange }: WorkspaceProps) {
-  const initialView = parseWorkspacePath(window.location.pathname);
+export function Workspace({ session, onLogout, onSessionChange }: WorkspaceProps) {
   const [routePath, setRoutePath] = useState(() => window.location.pathname);
-  const [selectedTeamSlug, setSelectedTeamSlug] = useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [requestedTeamSlug, setSelectedTeamSlug] = useState<string | null>(null);
+  const [requestedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<WorkspaceView>(initialView);
+  const activeView = parseWorkspacePath(routePath);
+  const [isOrganizationFormOpen, setIsOrganizationFormOpen] = useState(false);
+  const [setupStage, setSetupStage] = useState<'members' | 'project'>('members');
   const [includeArchivedProjects, setIncludeArchivedProjects] = useState(false);
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -134,12 +138,11 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('profile');
   const [isOrgSwitcherOpen, setIsOrgSwitcherOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isSetupComplete, setIsSetupComplete] = useState(entryPoint !== 'register');
   const [workspaceName, setWorkspaceName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
   const projectForm = useForm<ProjectFormValues>({
-    defaultValues: { name: '', description: '' },
+    defaultValues: { name: '', description: '', memberIds: [] },
     resolver: zodResolver(projectFormSchema)
   });
   const {
@@ -151,6 +154,8 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
   } = useTaskFilters();
   const organizationsQuery = useOrganizations();
   const teams = organizationsQuery.data?.teams ?? [];
+  const selectedTeamSlug = isOrganizationFormOpen ? null :
+    (teams.find((team) => team.slug === requestedTeamSlug)?.slug ?? teams[0]?.slug ?? null);
   const teamQuery = useOrganization(selectedTeamSlug);
   const teamDetail = teamQuery.data?.team ?? null;
   const projectsQuery = useProjects(
@@ -158,6 +163,8 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     includeArchivedProjects
   );
   const projects = projectsQuery.data?.projects ?? [];
+  const selectedProjectId = selectedTeamSlug ?
+    (projects.find((project) => project.id === requestedProjectId)?.id ?? projects[0]?.id ?? null) : null;
   const projectQuery = useProject(selectedProjectId);
   const projectDetail = projectQuery.data?.project ?? null;
   const tasksQuery = useTasks(
@@ -174,7 +181,14 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     canManageOrganization
   );
   const invitations = invitationsQuery.data?.invitations ?? [];
-  const isLoading = organizationsQuery.isLoading;
+  const needsTasks = ['board', 'my-tasks', 'calendar', 'activity'].includes(activeView);
+  const requiredQueries = [organizationsQuery,
+    ...(selectedTeamSlug ? [teamQuery, projectsQuery] : []),
+    ...(selectedProjectId ? [projectQuery] : []),
+    ...(selectedProjectId && needsTasks ? [tasksQuery] : [])];
+  const failedQuery = requiredQueries.find((query) => query.isError && query.data === undefined);
+  const isLoading = !failedQuery && requiredQueries.some((query) => query.data === undefined);
+
 
   const createOrganizationMutation = useCreateOrganization();
   const addOrganizationMemberMutation = useAddOrganizationMember(
@@ -277,9 +291,10 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     () => uniqueById(projectDetail?.members ?? []),
     [projectDetail?.members]
   );
-  const setupStep = !selectedTeamSlug ? 1 : 2;
-  const shouldShowSetupFlow =
-    entryPoint === 'register' && !isSetupComplete && !selectedProject;
+  const setupStep = !selectedTeamSlug ? 1 : setupStage === 'members' ? 2 : 3;
+  const shouldShowSetupFlow = isOrganizationFormOpen || !selectedTeamSlug ||
+    (!selectedProject && canManageOrganization && activeView === 'board');
+  const hasTaskFilters = Object.values(taskQueryFilters).some(Boolean) || Boolean(taskFilters.search.trim());
   const visibleTasks = useMemo(
     () => getFilteredTasks(tasks),
     [getFilteredTasks, tasks]
@@ -316,6 +331,11 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     ],
     [visibleTasks]
   );
+
+  useEffect(() => {
+    projectForm.reset({ name: '', description: '', memberIds: [] });
+    setSetupStage('members');
+  }, [selectedTeamSlug, projectForm]);
 
   function showToast(message: string, tone: 'success' | 'error' = 'success') {
     setToast({ message, tone });
@@ -403,11 +423,6 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  useEffect(() => {
-    const routeView = parseWorkspacePath(routePath);
-    setActiveView(routeView);
-  }, [routePath]);
-
   function navigateWorkspace(view: WorkspaceView, replace = false) {
     const nextPath = buildWorkspacePath(view);
     updateBrowserPath(nextPath, replace);
@@ -416,53 +431,18 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
 
 
   useEffect(() => {
-    if (organizationsQuery.isLoading) return;
-
-    if (!selectedTeamSlug && teams[0]) {
-      setSelectedTeamSlug(teams[0].slug);
-      return;
-    }
-
-    if (selectedTeamSlug && !teams.some((team) => team.slug === selectedTeamSlug)) {
-      const nextTeamSlug = teams[0]?.slug ?? null;
-      setSelectedTeamSlug(nextTeamSlug);
-      setSelectedProjectId(null);
-      setSelectedTaskId(null);
-    }
-  }, [organizationsQuery.isLoading, selectedTeamSlug, teams]);
-
-  useEffect(() => {
-    if (!selectedTeamSlug) {
-      setSelectedProjectId(null);
-      return;
-    }
-
-    if (projectsQuery.isLoading) return;
-
-    setSelectedProjectId((currentProjectId) => {
-      if (projects.some((project) => project.id === currentProjectId)) return currentProjectId;
-
-      const nextProjectId = projects[0]?.id ?? null;
-      return nextProjectId;
-    });
-  }, [projects, projectsQuery.isLoading, selectedTeamSlug]);
-
-  useEffect(() => {
     if (!selectedProjectId) {
       setSelectedTaskId(null);
     }
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!selectedProjectId || tasksQuery.isLoading) return;
-
-    setSelectedTaskId((currentTaskId) => {
-      if (!currentTaskId || tasks.some((task) => task.id === currentTaskId)) return currentTaskId;
-
+    if (!selectedProjectId || tasksQuery.isLoading || !selectedTaskId) return;
+    if (!tasks.some((task) => task.id === selectedTaskId)) {
       setIsTaskDetailsOpen(false);
-      return null;
-    });
-  }, [selectedProjectId, tasks, tasksQuery.isLoading]);
+      setSelectedTaskId(null);
+    }
+  }, [selectedProjectId, selectedTaskId, tasks, tasksQuery.isLoading]);
 
 
 
@@ -487,6 +467,8 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     try {
       setError(null);
       const response = await createOrganizationMutation.mutateAsync({ name });
+      setIsOrganizationFormOpen(false);
+      setSetupStage('members');
       setSelectedTeamSlug(response.team.slug);
       navigateWorkspace('board');
       setIsProjectFormOpen(false);
@@ -507,7 +489,8 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
       setError(null);
       const response = await createProjectMutation.mutateAsync({
         name: values.name,
-        description: values.description || undefined
+        description: values.description || undefined,
+        memberIds: values.memberIds
       });
       setSelectedProjectId(response.project.id);
       setSelectedTaskId(null);
@@ -515,9 +498,6 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
       projectForm.reset();
       setIsProjectFormOpen(false);
       showToast('Project created.');
-      if (entryPoint === 'register') {
-        setIsSetupComplete(true);
-      }
     } catch (createError) {
       showError('Project creation failed', createError);
     }
@@ -691,7 +671,6 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
       setSelectedTaskId(response.task.id);
       navigateWorkspace('board');
       setIsTaskFormOpen(false);
-      setIsSetupComplete(true);
       showToast('Task created.');
       return true;
     } catch (createError) {
@@ -834,6 +813,7 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     <main
       className={[
         'workspace-shell board-app',
+        shouldShowSetupFlow ? 'workspace-onboarding' : '',
         isSidebarCollapsed ? 'sidebar-collapsed' : ''
       ]
         .filter(Boolean)
@@ -857,14 +837,24 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
         onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
         onToggleOrgSwitcher={() => setIsOrgSwitcherOpen((current) => !current)}
         onSelectOrganization={(slug) => {
+          setIsOrganizationFormOpen(false);
+          setIsProjectFormOpen(false);
+          setIsTaskFormOpen(false);
+          setIsTaskDetailsOpen(false);
+          resetTaskFilters();
+          setError(null);
           setSelectedTeamSlug(slug);
           setSelectedProjectId(null);
           setSelectedTaskId(null);
-          setActiveView('board');
           navigateWorkspace('board');
           setIsOrgSwitcherOpen(false);
         }}
         onCreateOrganization={() => {
+          setIsOrganizationFormOpen(true);
+          setIsProjectFormOpen(false);
+          setIsTaskFormOpen(false);
+          setIsTaskDetailsOpen(false);
+          setError(null);
           setWorkspaceName('');
           setSelectedTeamSlug(null);
           setSelectedProjectId(null);
@@ -872,17 +862,25 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
           navigateWorkspace('board');
           setIsOrgSwitcherOpen(false);
         }}
-        onToggleProjectForm={() => setIsProjectFormOpen((current) => !current)}
+        onToggleProjectForm={() => {
+          if (!canManageOrganization) return;
+          projectForm.reset({ name: '', description: '', memberIds: [] });
+          setIsProjectFormOpen((current) => !current);
+          navigateWorkspace('board');
+        }}
         onIncludeArchivedChange={setIncludeArchivedProjects}
         onSelectProject={(projectId) => {
+          setIsTaskFormOpen(false);
+          setIsTaskDetailsOpen(false);
+          setIsProjectFormOpen(false);
+          resetTaskFilters();
+          setError(null);
           setSelectedProjectId(projectId);
           setSelectedTaskId(null);
-          setActiveView('board');
           navigateWorkspace('board');
         }}
         onSelectView={(view) => {
           if (view === 'settings') setSettingsSection('profile');
-          setActiveView(view);
           setSelectedTaskId(null);
           navigateWorkspace(view);
         }}
@@ -894,49 +892,42 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
       <section className="board-workspace">
         {error ? <p className="error-message">{error}</p> : null}
 
-        {isLoading ? (
-          <section className="empty-state">Loading organization...</section>
+        {failedQuery ? (
+          <section className="empty-state" role="alert">
+            <h2>Could not load your workspace</h2>
+            <p>{failedQuery.error instanceof Error ? failedQuery.error.message : 'Please try again.'}</p>
+            <button type="button" className="primary-button" onClick={() => void failedQuery.refetch()}>Retry</button>
+          </section>
+        ) : isLoading ? (
+          <section className="empty-state" role="status" aria-live="polite">Loading your workspace...</section>
         ) : shouldShowSetupFlow ? (
-          <section className="setup-flow">
+          <section className="setup-flow onboarding">
             <div className="setup-intro">
-              <p className="section-kicker">Organization setup</p>
-              <h1>Set up your ticket board</h1>
-              <p>
-                First create the organization and first project. Then you land on
-                the board, where task creation and teammate invites are always available.
-              </p>
+              <div className="onboarding-eyebrow"><span className="onboarding-dot" />LET’S GET YOU SET UP</div>
+              <h1>A home for your team’s best work.</h1>
+              <p>A few details now. A more organized workday ahead.</p>
             </div>
-
-            <div className="setup-steps">
+            <ol className="setup-steps" aria-label="Setup progress">
               {[
-                [1, "Organization", "Top-level account"],
-                [2, "Project", "Board for tickets"]
+                [1, "Organization", "Create your workspace"],
+                [2, "Members", "Bring your team together"],
+                [3, "Project", "Start something great"]
               ].map(([step, title, body]) => (
-                <div
-                  key={step}
-                  className={
-                    setupStep > Number(step)
-                      ? "setup-step done"
-                      : setupStep === Number(step)
-                        ? "setup-step active"
-                        : "setup-step"
-                  }
-                >
-                  <span>{step}</span>
-                  <div>
-                    <strong>{title}</strong>
-                    <p>{body}</p>
-                  </div>
-                </div>
+                <li key={step} aria-current={setupStep === Number(step) ? 'step' : undefined}
+                  className={setupStep > Number(step) ? 'setup-step done' : setupStep === Number(step) ? 'setup-step active' : 'setup-step'}>
+                  <span>{setupStep > Number(step) ? <Check size={15} aria-hidden="true" /> : step}</span>
+                  <div><strong>{title}</strong><p>{body}</p></div>
+                </li>
               ))}
-            </div>
-
+            </ol>
+            <div className="onboarding-card-label"><span>YOUR WORKSPACE</span><span>Step {setupStep} of 3</span></div>
             <div className="setup-card">
               {setupStep === 1 ? (
                 <>
                   <div className="setup-card-heading">
+                    <span className="onboarding-feature-icon"><Building2 size={23} aria-hidden="true" /></span>
                     <h2>Create organization</h2>
-                    <p>This is where your members, projects, and ticket boards live.</p>
+                    <p>Give your team a shared space for projects, people, and progress.</p>
                   </div>
                   <form className="setup-form vertical" onSubmit={handleCreateTeam}>
                     <label>
@@ -948,65 +939,40 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
                       />
                     </label>
                     <button type="submit" className="primary-button" disabled={isCreatingOrganization}>
-                      {isCreatingOrganization ? 'Creating...' : 'Create organization'}
+                      {isCreatingOrganization ? 'Creating...' : <>Create organization <ArrowRight size={16} aria-hidden="true" /></>}
                     </button>
+                    {isOrganizationFormOpen && teams.length > 0 ? <button type="button" className="ghost-button" disabled={isCreatingOrganization} onClick={() => { setIsOrganizationFormOpen(false); setError(null); }}>Cancel</button> : null}
                   </form>
                 </>
               ) : null}
 
               {setupStep === 2 ? (
+                <OrganizationMembersStep
+                  key={selectedTeamSlug}
+                  members={workspaceMembers}
+                  isSaving={isSavingOrganizationMembers}
+                  onAddMembers={async (emails, role) => {
+                    setError(null);
+                    const results = await Promise.allSettled(emails.filter((email) => !workspaceMembers.some((member) => member.email === email)).map((email) => addOrganizationMemberMutation.mutateAsync({ email, role })));
+                    await teamQuery.refetch();
+                    const failure = results.find((result) => result.status === 'rejected');
+                    if (failure?.status === 'rejected') { showError('Could not add members', failure.reason); return false; }
+                    showToast('Organization members added.');
+                    return true;
+                  }}
+                  onContinue={() => setSetupStage('project')}
+                />
+              ) : null}
+              {setupStep === 3 ? (
                 <>
-                  <div className="setup-card-heading">
-                    <h2>Create project</h2>
-                    <p>Projects are the boards where your tickets live.</p>
-                  </div>
-                  <form
-                    className="setup-form vertical"
-                    onSubmit={projectForm.handleSubmit(handleCreateProject, () => setError("Project name is required."))}
-                  >
-                    <label>
-                      Project name
-                      <input {...projectForm.register("name")} placeholder="Example: Website Launch" />
-                    </label>
-                    <label>
-                      Description
-                      <input {...projectForm.register("description")} placeholder="Short project purpose" />
-                    </label>
-                    {projectForm.formState.errors.name ? (
-                      <span className="field-error">{projectForm.formState.errors.name.message}</span>
-                    ) : null}
-                    <button type="submit" className="primary-button" disabled={isCreatingProject}>
-                      {isCreatingProject ? 'Creating...' : 'Create project'}
-                    </button>
-                  </form>
+                  <div className="setup-card-heading"><span className="onboarding-feature-icon"><FolderKanban size={23} aria-hidden="true" /></span><h2>Create your first project</h2><p>Set a direction and choose the people who will make it happen.</p></div>
+                  <ProjectCreationForm form={projectForm} members={workspaceMembers} currentUserId={session.user.id}
+                    isSaving={isCreatingProject} onSubmit={handleCreateProject} onManageMembers={() => setSetupStage('members')} />
                 </>
               ) : null}
 
             </div>
-          </section>
-        ) : !selectedTeamSlug ? (
-          <section className="board-empty-panel">
-            <div>
-              <p className="section-kicker">No organization</p>
-              <h2>Create an organization to start</h2>
-              <p>
-                After login, this is your tickets board. Create an organization
-                here, then add projects, members, and tasks from the board.
-              </p>
-            </div>
-            <form className="setup-form vertical" onSubmit={handleCreateTeam}>
-              <label>
-                Organization name
-                <input
-                  value={workspaceName}
-                  onChange={(event) => setWorkspaceName(event.target.value)}
-                  placeholder="Example: Acme Operations"
-                />
-              </label>
-              <button type="submit" className="primary-button" disabled={isCreatingOrganization}>
-                {isCreatingOrganization ? 'Creating...' : 'Create organization'}
-              </button>
-            </form>
+            <p className="onboarding-bottom-note">Make it yours. You can update your workspace details later.</p>
           </section>
         ) : (
           <>
@@ -1070,53 +1036,38 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
               />
             </div>
 
-            {isProjectFormOpen ? (
-              <form
-                id="project-create-form"
-                className="inline-create-panel board-create-panel"
-                onSubmit={projectForm.handleSubmit(handleCreateProject, () =>
-                  setError('Project name is required.')
-                )}
-              >
-                <input {...projectForm.register('name')} placeholder="Project name" />
-                <input
-                  {...projectForm.register('description')}
-                  placeholder="Short description"
-                />
-                <button type="submit" className="primary-button" disabled={isCreatingProject}>
-                  {isCreatingProject ? 'Creating...' : 'Create project'}
-                </button>
-                {projectForm.formState.errors.name ? (
-                  <span className="field-error form-wide">
-                    {projectForm.formState.errors.name.message}
-                  </span>
-                ) : null}
-              </form>
+            {isProjectFormOpen && canManageOrganization ? (
+              <section className="setup-card mb-6" aria-label="Create project">
+                <h2>Create project</h2>
+                <ProjectCreationForm form={projectForm} members={workspaceMembers} currentUserId={session.user.id}
+                  isSaving={isCreatingProject} onSubmit={handleCreateProject} onManageMembers={openOrganizationSettings}
+                  onCancel={() => setIsProjectFormOpen(false)} />
+              </section>
             ) : null}
 
             {activeView === 'board' ? (
               <>
-                {selectedProject && tasks.length === 0 ? (
+                {selectedProject && visibleTasks.length === 0 ? (
                   <section className="board-empty-panel board-empty-actions">
                     <div>
-                      <p className="section-kicker">Empty board</p>
-                      <h2>Start your project</h2>
-                      <p>Create the first ticket or invite teammates before planning work.</p>
+                      <p className="section-kicker">{hasTaskFilters ? 'Filtered results' : 'Empty board'}</p>
+                      <h2>{hasTaskFilters ? 'No matching tasks' : 'Start your project'}</h2>
+                      <p>{hasTaskFilters ? 'Clear your filters to see the other tasks in this project.' : 'Your project members are ready. Create a task and choose who should work on it.'}</p>
                     </div>
                     <div className="empty-cta-row">
                       <button
                         type="button"
                         className="primary-button equal-cta"
-                        onClick={() => setIsTaskFormOpen(true)}
+                        onClick={() => hasTaskFilters ? resetTaskFilters() : setIsTaskFormOpen(true)}
                       >
-                        Create your first task
+                        {hasTaskFilters ? 'Clear filters' : 'Create your first task'}
                       </button>
                       <button
                         type="button"
                         className="ghost-button equal-cta"
-                        onClick={openOrganizationSettings}
+                        onClick={openProjectMembersSettings}
                       >
-                        Invite your team
+                        Review project members
                       </button>
                     </div>
                   </section>
@@ -1131,7 +1082,7 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
                       create a new one to unlock the board.
                     </p>
                   </section>
-                ) : (
+                ) : visibleTasks.length > 0 ? (
                   <KanbanBoard
                     columns={taskColumns}
                     selectedTaskId={selectedTaskId}
@@ -1145,7 +1096,7 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
                     onColumnDragLeave={handleColumnDragLeave}
                     onColumnDrop={(event, status) => void handleColumnDrop(event, status)}
                   />
-                )}
+                ) : null}
               </>
             ) : null}
 
@@ -1224,6 +1175,7 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
       </section>
 
       <CreateTaskModal
+        key={selectedProjectId ?? 'no-project'}
         isOpen={isTaskFormOpen}
         projectName={selectedProject?.name}
         projectMembers={projectMembers}

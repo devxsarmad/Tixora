@@ -10,7 +10,8 @@ export const teamFormSchema = z.object({
 
 export const projectFormSchema = z.object({
   name: z.string().trim().min(1, 'Project name is required.').max(120),
-  description: z.string().trim().max(2000).optional()
+  description: z.string().trim().max(2000).optional(),
+  memberIds: z.array(z.string().uuid()).min(1, 'Select at least one project member.').max(100)
 });
 
 export const projectEditFormSchema = z.object({

@@ -8,7 +8,7 @@ export function listProjects(orgSlug: string, options: { includeArchived?: boole
   return apiRequest<{ projects: ProjectSummary[] }>('/api/teams/' + orgSlug + '/projects' + (query ? '?' + query : ''));
 }
 
-export function createProject(orgSlug: string, input: { name: string; description?: string }) {
+export function createProject(orgSlug: string, input: { name: string; description?: string; memberIds: string[] }) {
   return apiRequest<{ project: ProjectSummary }>('/api/teams/' + orgSlug + '/projects', { method: 'POST', body: JSON.stringify(input) });
 }
 

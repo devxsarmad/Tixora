@@ -4,6 +4,7 @@
 
 import type pg from 'pg';
 import { query, withTransaction } from '../../db/pool.js';
+import { HttpError } from '../../shared/http-error.js';
 
 type TeamRole = 'owner' | 'admin' | 'member';
 type ProjectRole = 'manager' | 'contributor' | 'viewer';
@@ -136,6 +137,7 @@ export async function createProjectForTeam(params: {
   userId: string;
   name: string;
   description?: string;
+  memberIds: string[];
 }): Promise<ProjectSummary | null | 'forbidden'> {
   return withTransaction(async (client) => {
     const access = await findTeamAccessForUser(client, params);
@@ -146,6 +148,17 @@ export async function createProjectForTeam(params: {
 
     if (!canCreateProject(access.team_role)) {
       return 'forbidden';
+    }
+
+    const memberIds = [...new Set([params.userId, ...params.memberIds])];
+    const members = await client.query<{ user_id: string }>(
+      `SELECT tm.user_id FROM team_members tm JOIN users u ON u.id = tm.user_id
+       WHERE tm.team_id = $1 AND tm.user_id = ANY($2::uuid[]) AND u.is_active = true
+       FOR SHARE OF tm, u`,
+      [access.team_id, memberIds]
+    );
+    if (members.rows.length !== memberIds.length) {
+      throw new HttpError(400, 'Select current organization members for this project.', 'PROJECT_MEMBER_NOT_IN_TEAM');
     }
 
     const projectResult = await client.query<ProjectRow>(
@@ -181,11 +194,13 @@ export async function createProjectForTeam(params: {
     await client.query(
       `
         INSERT INTO project_members (project_id, user_id, role)
-        VALUES ($1, $2, 'manager')
+        SELECT $1, member_id,
+          CASE WHEN member_id = $3::uuid THEN 'manager'::project_role ELSE 'contributor'::project_role END
+        FROM unnest($2::uuid[]) AS member_id
       `,
-      [project.id, params.userId]
+      [project.id, memberIds, params.userId]
     );
-
+    project.member_count = memberIds.length;
     return toProjectSummary(project);
   });
 }

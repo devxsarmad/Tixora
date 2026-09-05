@@ -116,6 +116,7 @@ async function main() {
     cookie,
     body: JSON.stringify({
       name: 'Smoke Project',
+      memberIds: [auth.user.id],
       description: 'Created by the API smoke test.'
     })
   });

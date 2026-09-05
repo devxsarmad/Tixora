@@ -117,7 +117,7 @@ export function listProjects(
 
 export function createProject(
   teamSlug: string,
-  input: { name: string; description?: string }
+  input: { name: string; description?: string; memberIds: string[] }
 ) {
   return apiRequest<{ project: ProjectSummary }>(
     `/api/teams/${teamSlug}/projects`,
