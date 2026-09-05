@@ -11,7 +11,6 @@ type OrgRole = 'admin' | 'member';
 
 type OrgMembersModalProps = {
   isOpen: boolean;
-  token: string;
   team: TeamDetail | null;
   members: TeamMember[];
   invitations: InvitationSummary[];
@@ -25,7 +24,6 @@ type OrgMembersModalProps = {
 
 export function OrgMembersModal({
   isOpen,
-  token,
   team,
   members,
   invitations,
@@ -42,7 +40,7 @@ export function OrgMembersModal({
   const [selectedDirectoryUserIds, setSelectedDirectoryUserIds] = useState<string[]>([]);
   const [workspaceMemberSearch, setWorkspaceMemberSearch] = useState('');
   const [teamMemberRole, setTeamMemberRole] = useState<OrgRole>('member');
-  const userDirectoryQuery = useUserSearch(token, debouncedUserDirectorySearch);
+  const userDirectoryQuery = useUserSearch(debouncedUserDirectorySearch);
   const userDirectoryResults = debouncedUserDirectorySearch.trim()
     ? userDirectoryQuery.data?.users ?? []
     : [];

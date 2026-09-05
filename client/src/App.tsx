@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AUTH_EXPIRED_EVENT } from './api/http.js';
+import { ApiError, AUTH_EXPIRED_EVENT } from './api/http.js';
 import tixoraLogo from './assests/tixora-logo.jpeg';
-import { login, register } from './features/auth/authApi.js';
+import { getSession, login, logout, register } from './features/auth/authApi.js';
 import { LoginPage } from './features/auth/pages/LoginPage.js';
 import { RegisterPage } from './features/auth/pages/RegisterPage.js';
-import { clearSession, loadSession, saveSession } from './features/auth/session.js';
+import { clearLegacySession } from './features/auth/session.js';
 import type { AuthResponse } from './features/auth/types.js';
 import { Workspace } from './features/workspace/Workspace.js';
 
@@ -24,7 +24,8 @@ function navigateTo(pathname: string, replace = false) {
 
 export function App() {
   const queryClient = useQueryClient();
-  const [session, setSession] = useState<AuthResponse | null>(() => loadSession());
+  const [session, setSession] = useState<AuthResponse | null>(null);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [mode, setMode] = useState<AuthMode>(() => getInitialAuthMode(window.location.pathname));
   const [authEntryPoint, setAuthEntryPoint] = useState<AuthEntryPoint>('restored');
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +40,8 @@ export function App() {
 
     try {
       const nextSession = await action();
-      console.log('Authenticated successfully:', nextSession);
       await queryClient.cancelQueries();
       queryClient.clear();
-      saveSession(nextSession);
       setAuthEntryPoint(entryPoint);
       setSession(nextSession);
       navigateTo(entryPoint === 'register' ? '/setup' : '/board', true);
@@ -56,7 +55,7 @@ export function App() {
   }
 
   function endSession(message?: string) {
-    clearSession();
+    clearLegacySession();
     void queryClient.cancelQueries();
     queryClient.clear();
     setSession(null);
@@ -67,40 +66,58 @@ export function App() {
   }
 
   function updateSession(nextSession: AuthResponse) {
-    saveSession(nextSession);
     setSession(nextSession);
   }
 
-  function handleLogout(message?: string) {
-    endSession(typeof message === 'string' ? message : undefined);
+  async function handleLogout(message?: string) {
+    try {
+      await logout();
+      endSession(typeof message === 'string' ? message : undefined);
+    } catch {
+      window.alert('Could not sign out. Please try again.');
+    }
   }
 
   useEffect(() => {
+    let active = true;
+    clearLegacySession();
+    void getSession().then((restored) => {
+      if (active) setSession(restored);
+    }).catch((restoreError: unknown) => {
+      if (active && !(restoreError instanceof ApiError && restoreError.status === 401)) {
+        setError('Could not restore your session. Please try logging in again.');
+      }
+    }).finally(() => { if (active) setIsRestoringSession(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     function handlePopState() {
-      if (!loadSession()) {
+      if (!session) {
         setMode(getInitialAuthMode(window.location.pathname));
       }
     }
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     function handleAuthExpired() {
+      if (isRestoringSession) return;
       endSession('Your session expired. Please log in again.');
     }
 
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
-  }, [queryClient]);
+  }, [queryClient, isRestoringSession]);
 
   useEffect(() => {
-    if (session) return;
+    if (session || isRestoringSession) return;
     if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
       navigateTo('/login', true);
     }
-  }, [session]);
+  }, [session, isRestoringSession]);
 
   useEffect(() => {
     if (!session) return;
@@ -109,6 +126,8 @@ export function App() {
       navigateTo('/board', true);
     }
   }, [session]);
+
+  if (isRestoringSession) return <main className="auth-shell" role="status">Loading your workspace...</main>;
 
   if (session) {
     return (

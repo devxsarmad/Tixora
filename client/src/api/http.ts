@@ -44,8 +44,10 @@ export async function apiRequest<T>(
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    credentials: 'include',
     headers: {
-      ...headers
+      ...headers,
+      'X-Tixora-Request': '1'
     }
   });
 
@@ -67,10 +69,4 @@ export async function apiRequest<T>(
   }
 
   return data as T;
-}
-
-export function authHeaders(token: string): HeadersInit {
-  return {
-    Authorization: `Bearer ${token}`
-  };
 }

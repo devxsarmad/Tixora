@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-timeout=20000 tests/*.test.ts",
     "db:check": "tsx src/db/check-connection.ts",
     "db:migrate": "tsx src/db/migrate.ts up",
     "db:rollback": "tsx src/db/migrate.ts down",

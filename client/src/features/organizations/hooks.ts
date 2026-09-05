@@ -8,46 +8,46 @@ export const organizationKeys = {
   users: (query: string) => ['users', query] as const
 };
 
-export function useOrganizations(token: string) {
-  return useQuery({ queryKey: organizationKeys.all, queryFn: () => organizationsApi.listOrganizations(token) });
+export function useOrganizations() {
+  return useQuery({ queryKey: organizationKeys.all, queryFn: () => organizationsApi.listOrganizations() });
 }
 
-export function useOrganization(token: string, orgSlug: string | null) {
+export function useOrganization(orgSlug: string | null) {
   return useQuery({
     queryKey: organizationKeys.detail(orgSlug),
-    queryFn: () => organizationsApi.getOrganization(token, orgSlug ?? ''),
+    queryFn: () => organizationsApi.getOrganization(orgSlug ?? ''),
     enabled: Boolean(orgSlug)
   });
 }
 
-export function useInvitations(token: string, orgSlug: string | null, enabled = true) {
+export function useInvitations(orgSlug: string | null, enabled = true) {
   return useQuery({
     queryKey: organizationKeys.invitations(orgSlug),
-    queryFn: () => organizationsApi.listInvitations(token, orgSlug ?? ''),
+    queryFn: () => organizationsApi.listInvitations(orgSlug ?? ''),
     enabled: Boolean(orgSlug) && enabled
   });
 }
 
-export function useUserSearch(token: string, query: string) {
+export function useUserSearch(query: string) {
   return useQuery({
     queryKey: organizationKeys.users(query.trim()),
-    queryFn: () => organizationsApi.searchUsers(token, query),
+    queryFn: () => organizationsApi.searchUsers(query),
     enabled: Boolean(query.trim())
   });
 }
 
-export function useCreateOrganization(token: string) {
+export function useCreateOrganization() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string }) => organizationsApi.createOrganization(token, input),
+    mutationFn: (input: { name: string }) => organizationsApi.createOrganization(input),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: organizationKeys.all }); }
   });
 }
 
-export function useAddOrganizationMember(token: string, orgSlug: string | null) {
+export function useAddOrganizationMember(orgSlug: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { email: string; role: 'admin' | 'member' }) => organizationsApi.addOrganizationMember(token, orgSlug ?? '', input),
+    mutationFn: (input: { email: string; role: 'admin' | 'member' }) => organizationsApi.addOrganizationMember(orgSlug ?? '', input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: organizationKeys.detail(orgSlug) });
       void queryClient.invalidateQueries({ queryKey: organizationKeys.all });
@@ -55,18 +55,18 @@ export function useAddOrganizationMember(token: string, orgSlug: string | null) 
   });
 }
 
-export function useUpdateOrganizationMember(token: string, orgSlug: string | null) {
+export function useUpdateOrganizationMember(orgSlug: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { userId: string; role: 'admin' | 'member' }) => organizationsApi.updateOrganizationMember(token, orgSlug ?? '', input.userId, input.role),
+    mutationFn: (input: { userId: string; role: 'admin' | 'member' }) => organizationsApi.updateOrganizationMember(orgSlug ?? '', input.userId, input.role),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: organizationKeys.detail(orgSlug) }); }
   });
 }
 
-export function useRemoveOrganizationMember(token: string, orgSlug: string | null) {
+export function useRemoveOrganizationMember(orgSlug: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => organizationsApi.removeOrganizationMember(token, orgSlug ?? '', userId),
+    mutationFn: (userId: string) => organizationsApi.removeOrganizationMember(orgSlug ?? '', userId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: organizationKeys.detail(orgSlug) });
       void queryClient.invalidateQueries({ queryKey: organizationKeys.all });
@@ -74,10 +74,10 @@ export function useRemoveOrganizationMember(token: string, orgSlug: string | nul
   });
 }
 
-export function useCreateInvitation(token: string, orgSlug: string | null) {
+export function useCreateInvitation(orgSlug: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { email: string; role: 'admin' | 'member' }) => organizationsApi.createInvitation(token, orgSlug ?? '', input),
+    mutationFn: (input: { email: string; role: 'admin' | 'member' }) => organizationsApi.createInvitation(orgSlug ?? '', input),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: organizationKeys.invitations(orgSlug) }); }
   });
 }

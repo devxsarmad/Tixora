@@ -17,12 +17,14 @@ import { taskRouter } from './features/tasks/task.routes.js';
 import { teamRouter } from './features/teams/team.routes.js';
 import { userRouter } from './features/users/user.routes.js';
 import { errorMiddleware } from './shared/error-middleware.js';
+import { requireTrustedRequest } from './middleware/require-trusted-request.js';
 
 export function createApp() {
   const app = express();
 
   app.use(helmet());
-  app.use(cors({ origin: env.CORS_ORIGIN }));
+  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+  app.use('/api', requireTrustedRequest);
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/health', (_req, res) => {

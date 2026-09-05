@@ -12,7 +12,6 @@ import { chatHistoryKey, chatHistoryStore, type AskMessage } from './chatHistory
 
 type AskTixoraPanelProps = {
   userId: string;
-  token: string;
   orgSlug: string | null;
   projectId: string | null;
   onOpenTask: (taskId: string) => void;
@@ -104,7 +103,7 @@ function updateActionArgument(action: PendingAssistantAction, argumentKey: strin
   };
 }
 
-export function AskTixoraPanel({ userId, token, orgSlug, projectId, onOpenTask }: AskTixoraPanelProps) {
+export function AskTixoraPanel({ userId, orgSlug, projectId, onOpenTask }: AskTixoraPanelProps) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const historyKey = chatHistoryKey(userId, orgSlug, projectId);
@@ -134,7 +133,6 @@ export function AskTixoraPanel({ userId, token, orgSlug, projectId, onOpenTask }
 
     try {
       const response = await askTixora({
-        token,
         orgSlug,
         projectId: projectId ?? undefined,
         query: trimmedQuery
@@ -172,7 +170,6 @@ export function AskTixoraPanel({ userId, token, orgSlug, projectId, onOpenTask }
 
     try {
       const response = await confirmTixoraActions({
-        token,
         orgSlug,
         pendingActions: [{ id: action.id, toolName: action.toolName, argumentsText: action.argumentsText }],
         confirmedIds: [action.id]

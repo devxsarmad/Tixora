@@ -68,7 +68,7 @@ function settingsNavButtonClass(isActive: boolean) {
 type SettingsViewProps = {
   session: AuthResponse;
   activeSection: SettingsSection;
-  token: string;
+
   team: TeamDetail | null;
   project: ProjectSummary | null;
   projectDetail: ProjectDetail | null;
@@ -102,7 +102,6 @@ type SettingsViewProps = {
 export function SettingsView({
   session,
   activeSection,
-  token,
   team,
   project,
   projectDetail,
@@ -151,7 +150,7 @@ export function SettingsView({
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'leave-organization' | 'delete-account' | null>(null);
-  const userDirectoryQuery = useUserSearch(token, debouncedDirectorySearch);
+  const userDirectoryQuery = useUserSearch(debouncedDirectorySearch);
   const userDirectoryResults = debouncedDirectorySearch.trim() ? userDirectoryQuery.data?.users ?? [] : [];
   const projectEditForm = useForm<ProjectEditFormValues>({
     defaultValues: { name: '', description: '' },

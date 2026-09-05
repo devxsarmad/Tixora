@@ -8,7 +8,6 @@ import type { TaskFilters } from '../tasks/api.js';
 import type { TaskSummary } from '../tasks/types.js';
 
 export function useWorkspaceData({
-  token,
   selectedTeamSlug,
   selectedProjectId,
   selectedTaskId,
@@ -16,7 +15,7 @@ export function useWorkspaceData({
   taskQueryFilters,
   getFilteredTasks
 }: {
-  token: string;
+
   selectedTeamSlug: string | null;
   selectedProjectId: string | null;
   selectedTaskId: string | null;
@@ -24,20 +23,20 @@ export function useWorkspaceData({
   taskQueryFilters: TaskFilters;
   getFilteredTasks: (tasks: TaskSummary[]) => TaskSummary[];
 }) {
-  const organizationsQuery = useOrganizations(token);
+  const organizationsQuery = useOrganizations();
   const teams = organizationsQuery.data?.teams ?? [];
-  const teamQuery = useOrganization(token, selectedTeamSlug);
+  const teamQuery = useOrganization(selectedTeamSlug);
   const teamDetail = teamQuery.data?.team ?? null;
-  const projectsQuery = useProjects(token, selectedTeamSlug, includeArchivedProjects);
+  const projectsQuery = useProjects(selectedTeamSlug, includeArchivedProjects);
   const projects = projectsQuery.data?.projects ?? [];
-  const projectQuery = useProject(token, selectedProjectId);
+  const projectQuery = useProject(selectedProjectId);
   const projectDetail = projectQuery.data?.project ?? null;
-  const tasksQuery = useTasks(token, selectedProjectId, taskQueryFilters);
+  const tasksQuery = useTasks(selectedProjectId, taskQueryFilters);
   const tasks = tasksQuery.data?.tasks ?? [];
-  const commentsQuery = useComments(token, selectedTaskId);
+  const commentsQuery = useComments(selectedTaskId);
   const comments = commentsQuery.data?.comments ?? [];
   const canManageOrganization = teamDetail?.role === 'owner' || teamDetail?.role === 'admin';
-  const invitationsQuery = useInvitations(token, selectedTeamSlug, canManageOrganization);
+  const invitationsQuery = useInvitations(selectedTeamSlug, canManageOrganization);
   const invitations = invitationsQuery.data?.invitations ?? [];
 
   const selectedTeam = useMemo(

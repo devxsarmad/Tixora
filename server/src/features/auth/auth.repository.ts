@@ -76,3 +76,11 @@ export async function findUserByEmail(
     isActive: row.is_active
   };
 }
+
+export async function findPublicUserById(userId: string): Promise<PublicUser | null> {
+  const result = await query<UserRow>(
+    'SELECT id, email, display_name, created_at FROM users WHERE id = $1 AND is_active = true',
+    [userId]
+  );
+  return result.rows[0] ? toPublicUser(result.rows[0]) : null;
+}

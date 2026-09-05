@@ -47,7 +47,7 @@ Organization membership and project membership are separate layers:
 
 ## Current Feature Set
 
-- JWT register/login
+- Cookie-based JWT register/login
 - Organization onboarding and workspace routing
 - Organization member management
 - Project list, create, edit, archive, and project access management
@@ -94,6 +94,26 @@ npm run db:seed
 ```
 
 ## Backend
+
+Authentication uses a backend-set `tixora.auth` cookie (`HttpOnly`, `SameSite=Lax`,
+`Path=/api`, and `Secure` in production). Login/register return only user details.
+The frontend restores its session through `GET /api/auth/session` and clears the
+cookie through `POST /api/auth/logout`. Legacy localStorage login tokens are
+removed on startup; existing users must log in again after this migration.
+
+Set `CORS_ORIGIN` to the exact frontend origin. Production requires HTTPS and a
+same-site frontend/API deployment (for example, an `/api` reverse proxy or HTTPS
+subdomains of the same site). Cross-site hosting is not supported by this cookie
+configuration. API requests include credentials; all mutation requests, including
+login/logout, must send `X-Tixora-Request: 1`. Browser mutation origins must match
+`CORS_ORIGIN`. Bearer authentication is no longer accepted.
+
+Chat history remains browser-local, scoped by user/organization/project IDs;
+those identifiers are not authentication credentials.
+
+Run cookie-authentication regression tests with `npm test --prefix server`.
+These exercise HTTP routes with database calls mocked; they do not require a
+running PostgreSQL instance.
 
 Install dependencies:
 

@@ -7,35 +7,35 @@ export const projectKeys = {
   detail: (projectId: string | null) => ['project', projectId] as const
 };
 
-export function useProjects(token: string, orgSlug: string | null, includeArchived = false) {
-  return useQuery({ queryKey: projectKeys.list(orgSlug, includeArchived), queryFn: () => projectsApi.listProjects(token, orgSlug ?? '', { includeArchived }), enabled: Boolean(orgSlug) });
+export function useProjects(orgSlug: string | null, includeArchived = false) {
+  return useQuery({ queryKey: projectKeys.list(orgSlug, includeArchived), queryFn: () => projectsApi.listProjects(orgSlug ?? '', { includeArchived }), enabled: Boolean(orgSlug) });
 }
 
-export function useProject(token: string, projectId: string | null) {
-  return useQuery({ queryKey: projectKeys.detail(projectId), queryFn: () => projectsApi.getProject(token, projectId ?? ''), enabled: Boolean(projectId) });
+export function useProject(projectId: string | null) {
+  return useQuery({ queryKey: projectKeys.detail(projectId), queryFn: () => projectsApi.getProject(projectId ?? ''), enabled: Boolean(projectId) });
 }
 
-export function useCreateProject(token: string, orgSlug: string | null, includeArchived = false) {
+export function useCreateProject(orgSlug: string | null, includeArchived = false) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (input: { name: string; description?: string }) => projectsApi.createProject(token, orgSlug ?? '', input), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
+  return useMutation({ mutationFn: (input: { name: string; description?: string }) => projectsApi.createProject(orgSlug ?? '', input), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
 }
 
-export function useUpdateProject(token: string, projectId: string | null, orgSlug: string | null, includeArchived = false) {
+export function useUpdateProject(projectId: string | null, orgSlug: string | null, includeArchived = false) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (input: { name?: string; description?: string | null }) => projectsApi.updateProject(token, projectId ?? '', input), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) }); void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
+  return useMutation({ mutationFn: (input: { name?: string; description?: string | null }) => projectsApi.updateProject(projectId ?? '', input), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) }); void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
 }
 
-export function useArchiveProject(token: string, projectId: string | null, orgSlug: string | null, includeArchived = false) {
+export function useArchiveProject(projectId: string | null, orgSlug: string | null, includeArchived = false) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: () => projectsApi.archiveProject(token, projectId ?? ''), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
+  return useMutation({ mutationFn: () => projectsApi.archiveProject(projectId ?? ''), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.list(orgSlug, includeArchived) }); } });
 }
 
-export function useUpsertProjectMember(token: string, projectId: string | null) {
+export function useUpsertProjectMember(projectId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (input: { userId: string; role: ProjectMember['role'] }) => projectsApi.upsertProjectMember(token, projectId ?? '', input), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) }); } });
+  return useMutation({ mutationFn: (input: { userId: string; role: ProjectMember['role'] }) => projectsApi.upsertProjectMember(projectId ?? '', input), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) }); } });
 }
 
-export function useRemoveProjectMember(token: string, projectId: string | null) {
+export function useRemoveProjectMember(projectId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (userId: string) => projectsApi.removeProjectMember(token, projectId ?? '', userId), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) }); } });
+  return useMutation({ mutationFn: (userId: string) => projectsApi.removeProjectMember(projectId ?? '', userId), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) }); } });
 }

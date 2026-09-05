@@ -10,22 +10,24 @@ const memberEmail = `smoke-member-${Date.now()}@teamtask.dev`;
 const password = 'Password123!';
 
 type AuthResponse = {
-  accessToken: string;
   user: {
     id: string;
     email: string;
   };
 };
 
+const authCookies = new Map<string, string>();
+
 async function request<T>(
   path: string,
-  options: RequestInit & { token?: string } = {}
+  options: RequestInit & { cookie?: string } = {}
 ): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
+  headers.set('X-Tixora-Request', '1');
 
-  if (options.token) {
-    headers.set('Authorization', `Bearer ${options.token}`);
+  if (options.cookie) {
+    headers.set('Cookie', options.cookie);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -42,6 +44,8 @@ async function request<T>(
     );
   }
 
+  const cookie = response.headers.get('set-cookie')?.split(';')[0];
+  if (cookie && body?.user?.id) authCookies.set(body.user.id, cookie);
   return body as T;
 }
 
@@ -66,14 +70,14 @@ async function main() {
     })
   });
 
-  const token = auth.accessToken;
+  const cookie = authCookies.get(auth.user.id)!;
   const slug = `smoke-team-${Date.now()}`;
 
   const teamResponse = await request<{
     team: { id: string; slug: string };
   }>('/api/teams', {
     method: 'POST',
-    token,
+    cookie,
     body: JSON.stringify({
       name: 'Smoke Team',
       slug
@@ -83,14 +87,14 @@ async function main() {
   await request<{
     team: { id: string; members: Array<{ id: string; email: string }> };
   }>(`/api/teams/${teamResponse.team.slug}`, {
-    token
+    cookie
   });
 
   await request<{
     member: { id: string };
   }>(`/api/teams/${teamResponse.team.slug}/members`, {
     method: 'POST',
-    token,
+    cookie,
     body: JSON.stringify({
       email: memberAuth.user.email,
       role: 'member'
@@ -99,7 +103,7 @@ async function main() {
 
   await request(`/api/teams/${teamResponse.team.slug}/members/${memberAuth.user.id}`, {
     method: 'PATCH',
-    token,
+    cookie,
     body: JSON.stringify({
       role: 'admin'
     })
@@ -109,7 +113,7 @@ async function main() {
     project: { id: string };
   }>(`/api/teams/${teamResponse.team.slug}/projects`, {
     method: 'POST',
-    token,
+    cookie,
     body: JSON.stringify({
       name: 'Smoke Project',
       description: 'Created by the API smoke test.'
@@ -117,12 +121,12 @@ async function main() {
   });
 
   await request(`/api/projects/${projectResponse.project.id}`, {
-    token
+    cookie
   });
 
   await request(`/api/projects/${projectResponse.project.id}/members`, {
     method: 'PUT',
-    token,
+    cookie,
     body: JSON.stringify({
       userId: memberAuth.user.id,
       role: 'contributor'
@@ -131,7 +135,7 @@ async function main() {
 
   await request(`/api/projects/${projectResponse.project.id}`, {
     method: 'PATCH',
-    token,
+    cookie,
     body: JSON.stringify({
       name: 'Smoke Project Updated',
       description: 'Updated by the API smoke test.'
@@ -142,7 +146,7 @@ async function main() {
     task: { id: string };
   }>(`/api/projects/${projectResponse.project.id}/tasks`, {
     method: 'POST',
-    token,
+    cookie,
     body: JSON.stringify({
       title: 'Smoke task',
       description: 'Created by the API smoke test.',
@@ -153,12 +157,12 @@ async function main() {
   });
 
   await request(`/api/tasks/${taskResponse.task.id}`, {
-    token
+    cookie
   });
 
   await request(`/api/tasks/${taskResponse.task.id}`, {
     method: 'PATCH',
-    token,
+    cookie,
     body: JSON.stringify({
       status: 'in_progress'
     })
@@ -166,7 +170,7 @@ async function main() {
 
   await request(`/api/tasks/${taskResponse.task.id}/assignees`, {
     method: 'PUT',
-    token,
+    cookie,
     body: JSON.stringify({
       assigneeIds: [auth.user.id]
     })
@@ -174,7 +178,7 @@ async function main() {
 
   await request(`/api/tasks/${taskResponse.task.id}/assignees`, {
     method: 'PUT',
-    token,
+    cookie,
     body: JSON.stringify({
       assigneeIds: [auth.user.id, memberAuth.user.id]
     })
@@ -183,31 +187,31 @@ async function main() {
   await request(
     `/api/projects/${projectResponse.project.id}/tasks?status=in_progress&priority=high&assigneeId=${auth.user.id}`,
     {
-      token
+      cookie
     }
   );
 
   await request(`/api/projects/${projectResponse.project.id}/tasks?due=upcoming`, {
-    token
+    cookie
   });
 
   const commentResponse = await request<{
     comment: { id: string };
   }>(`/api/tasks/${taskResponse.task.id}/comments`, {
     method: 'POST',
-    token,
+    cookie,
     body: JSON.stringify({
       body: 'Smoke comment created successfully.'
     })
   });
 
   await request(`/api/tasks/${taskResponse.task.id}/comments?limit=10`, {
-    token
+    cookie
   });
 
   await request(`/api/comments/${commentResponse.comment.id}`, {
     method: 'PATCH',
-    token,
+    cookie,
     body: JSON.stringify({
       body: 'Smoke comment updated successfully.'
     })
@@ -215,16 +219,16 @@ async function main() {
 
   await request(`/api/comments/${commentResponse.comment.id}`, {
     method: 'DELETE',
-    token
+    cookie
   });
 
   await request(`/api/projects/${projectResponse.project.id}/archive`, {
     method: 'POST',
-    token
+    cookie
   });
 
   await request(`/api/teams/${teamResponse.team.slug}/projects?includeArchived=true`, {
-    token
+    cookie
   });
 
   console.log('Smoke test passed');

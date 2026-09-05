@@ -9,6 +9,7 @@ import { asyncHandler } from '../../shared/async-handler.js';
 import { changePassword, deleteMe, leaveOrganization, updateMe } from './account.service.js';
 import { changePasswordSchema, updateMeSchema } from './account.schemas.js';
 import { teamSlugParamSchema } from '../teams/team.schemas.js';
+import { clearAuthCookie } from '../auth/auth.cookie.js';
 
 export const accountRouter = Router();
 
@@ -54,7 +55,7 @@ accountRouter.delete(
   asyncHandler(async (req, res) => {
     const authReq = req as AuthenticatedRequest;
     const user = await deleteMe(authReq.user.id);
-
+    clearAuthCookie(res);
     res.status(200).json({ user });
   })
 );

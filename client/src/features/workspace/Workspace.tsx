@@ -149,106 +149,88 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
     queryFilters: taskQueryFilters,
     getFilteredTasks
   } = useTaskFilters();
-  const organizationsQuery = useOrganizations(session.accessToken);
+  const organizationsQuery = useOrganizations();
   const teams = organizationsQuery.data?.teams ?? [];
-  const teamQuery = useOrganization(session.accessToken, selectedTeamSlug);
+  const teamQuery = useOrganization(selectedTeamSlug);
   const teamDetail = teamQuery.data?.team ?? null;
   const projectsQuery = useProjects(
-    session.accessToken,
     selectedTeamSlug,
     includeArchivedProjects
   );
   const projects = projectsQuery.data?.projects ?? [];
-  const projectQuery = useProject(session.accessToken, selectedProjectId);
+  const projectQuery = useProject(selectedProjectId);
   const projectDetail = projectQuery.data?.project ?? null;
   const tasksQuery = useTasks(
-    session.accessToken,
     selectedProjectId,
     taskQueryFilters
   );
   const tasks = tasksQuery.data?.tasks ?? [];
-  const commentsQuery = useComments(session.accessToken, selectedTaskId);
+  const commentsQuery = useComments(selectedTaskId);
   const comments = commentsQuery.data?.comments ?? [];
   const canManageOrganization =
     teamDetail?.role === 'owner' || teamDetail?.role === 'admin';
   const invitationsQuery = useInvitations(
-    session.accessToken,
     selectedTeamSlug,
     canManageOrganization
   );
   const invitations = invitationsQuery.data?.invitations ?? [];
   const isLoading = organizationsQuery.isLoading;
 
-  const createOrganizationMutation = useCreateOrganization(session.accessToken);
+  const createOrganizationMutation = useCreateOrganization();
   const addOrganizationMemberMutation = useAddOrganizationMember(
-    session.accessToken,
     selectedTeamSlug
   );
   const updateOrganizationMemberMutation = useUpdateOrganizationMember(
-    session.accessToken,
     selectedTeamSlug
   );
   const removeOrganizationMemberMutation = useRemoveOrganizationMember(
-    session.accessToken,
     selectedTeamSlug
   );
   const createInvitationMutation = useCreateInvitation(
-    session.accessToken,
     selectedTeamSlug
   );
   const createProjectMutation = useCreateProject(
-    session.accessToken,
     selectedTeamSlug,
     includeArchivedProjects
   );
   const updateProjectMutation = useUpdateProject(
-    session.accessToken,
     selectedProjectId,
     selectedTeamSlug,
     includeArchivedProjects
   );
   const archiveProjectMutation = useArchiveProject(
-    session.accessToken,
     selectedProjectId,
     selectedTeamSlug,
     includeArchivedProjects
   );
   const upsertProjectMemberMutation = useUpsertProjectMember(
-    session.accessToken,
     selectedProjectId
   );
   const removeProjectMemberMutation = useRemoveProjectMember(
-    session.accessToken,
     selectedProjectId
   );
   const createTaskMutation = useCreateTask(
-    session.accessToken,
     selectedProjectId,
     taskQueryFilters
   );
   const updateTaskMutation = useUpdateTask(
-    session.accessToken,
     selectedProjectId
   );
   const createCommentMutation = useCreateComment(
-    session.accessToken,
     selectedTaskId
   );
   const updateCommentMutation = useUpdateComment(
-    session.accessToken,
     selectedTaskId
   );
   const deleteCommentMutation = useDeleteComment(
-    session.accessToken,
     selectedTaskId
   );
-  const updateProfileMutation = useUpdateProfile(session.accessToken);
-  const changePasswordMutation = useChangePassword(session.accessToken);
+  const updateProfileMutation = useUpdateProfile();
+  const changePasswordMutation = useChangePassword();
   const leaveOrganizationMutation = useLeaveOrganization(
-    session.accessToken,
     selectedTeamSlug
   );
-  const deleteAccountMutation = useDeleteAccount(session.accessToken);
+  const deleteAccountMutation = useDeleteAccount();
 
   const isCreatingOrganization = createOrganizationMutation.isPending;
   const isCreatingProject = createProjectMutation.isPending;
@@ -1197,7 +1179,6 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
               <AskTixoraPanel
                 key={JSON.stringify([session.user.id, selectedTeamSlug, selectedProjectId])}
                 userId={session.user.id}
-                token={session.accessToken}
                 orgSlug={selectedTeamSlug}
                 projectId={selectedProjectId}
                 onOpenTask={openTaskDetails}
@@ -1208,7 +1189,6 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
               <SettingsView
                 session={session}
                 activeSection={settingsSection}
-                token={session.accessToken}
                 team={teamDetail}
                 project={selectedProject}
                 projectDetail={projectDetail}

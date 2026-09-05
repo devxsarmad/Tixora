@@ -1,4 +1,4 @@
-import { apiRequest, authHeaders } from '../../api/http.js';
+import { apiRequest } from '../../api/http.js';
 
 export type AskTixoraSource = {
   taskId: string;
@@ -48,7 +48,6 @@ export type ConfirmTixoraResponse = {
 };
 
 export function askTixora(params: {
-  token: string;
   orgSlug: string;
   query: string;
   projectId?: string;
@@ -56,7 +55,6 @@ export function askTixora(params: {
   return apiRequest<AskTixoraResponse>('/api/assistant/ask', {
     method: 'POST',
     headers: {
-      ...authHeaders(params.token),
       'x-tixora-org-slug': params.orgSlug
     },
     body: JSON.stringify({
@@ -68,7 +66,6 @@ export function askTixora(params: {
 
 
 export function confirmTixoraActions(params: {
-  token: string;
   orgSlug: string;
   pendingActions: Array<{ id: string; toolName: AskTixoraToolName; argumentsText: string }>;
   confirmedIds: string[];
@@ -76,7 +73,6 @@ export function confirmTixoraActions(params: {
   return apiRequest<ConfirmTixoraResponse>('/api/assistant/confirm', {
     method: 'POST',
     headers: {
-      ...authHeaders(params.token),
       'x-tixora-org-slug': params.orgSlug
     },
     body: JSON.stringify({

@@ -1,5 +1,5 @@
 // Usage:
-// Verifies Bearer JWTs, checks the user still exists and is active, then attaches
+// Verifies the HttpOnly cookie JWT, checks the user still exists and is active, then attaches
 // the authenticated user to the request.
 
 import type { RequestHandler } from 'express';
@@ -8,6 +8,7 @@ import { env } from '../config/env.js';
 import { query } from '../db/pool.js';
 import { HttpError } from '../shared/http-error.js';
 import type { AuthenticatedUser } from '../shared/authenticated-request.js';
+import { readAuthCookie } from '../features/auth/auth.cookie.js';
 
 type JwtPayload = {
   sub?: string;
@@ -18,14 +19,6 @@ type ActiveUserRow = {
   id: string;
   email: string;
 };
-
-function readBearerToken(header: string | undefined): string {
-  if (!header?.startsWith('Bearer ')) {
-    throw new HttpError(401, 'Missing bearer token', 'AUTH_REQUIRED');
-  }
-
-  return header.slice('Bearer '.length);
-}
 
 async function findActiveUserById(userId: string): Promise<AuthenticatedUser | null> {
   const result = await query<ActiveUserRow>(
@@ -44,7 +37,8 @@ async function findActiveUserById(userId: string): Promise<AuthenticatedUser | n
 
 export const requireAuth: RequestHandler = async (req, _res, next) => {
   try {
-    const token = readBearerToken(req.header('authorization'));
+    const token = readAuthCookie(req.header('cookie'));
+    if (!token) throw new HttpError(401, 'Authentication required', 'AUTH_REQUIRED');
     const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
 
     if (!payload.sub) {
