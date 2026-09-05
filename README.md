@@ -111,6 +111,13 @@ login/logout, must send `X-Tixora-Request: 1`. Browser mutation origins must mat
 Chat history remains browser-local, scoped by user/organization/project IDs;
 those identifiers are not authentication credentials.
 
+For the Vercel frontend, `client/vercel.json` proxies `/api/*` to
+`https://tixora-ai-1.onrender.com/api/*`, with API caching disabled. Leave
+`VITE_API_BASE_URL` unset on Vercel so requests use this same-origin proxy.
+Set Render's `CORS_ORIGIN` to `https://tixora-ai-iota.vercel.app` for the current
+frontend deployment. Update both the proxy destination and allowed origin if
+these service URLs change. Redeploy after changing build-time Vite variables.
+
 Run cookie-authentication regression tests with `npm test --prefix server`.
 These exercise HTTP routes with database calls mocked; they do not require a
 running PostgreSQL instance.
