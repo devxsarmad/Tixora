@@ -2,7 +2,9 @@
 // Small fetch wrapper for frontend API calls. It keeps the API base URL in one
 // place and throws clean errors for non-2xx responses.
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+// Production uses the /api proxy so HttpOnly cookies stay on the frontend's
+// origin. A stale build-time backend URL must not bypass that proxy.
+const API_BASE_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_BASE_URL ?? '');
 
 export const AUTH_EXPIRED_EVENT = 'tixora:auth-expired';
 
