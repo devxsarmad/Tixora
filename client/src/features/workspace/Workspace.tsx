@@ -1195,6 +1195,8 @@ export function Workspace({ session, entryPoint, onLogout, onSessionChange }: Wo
 
             {activeView === 'ask' ? (
               <AskTixoraPanel
+                key={JSON.stringify([session.user.id, selectedTeamSlug, selectedProjectId])}
+                userId={session.user.id}
                 token={session.accessToken}
                 orgSlug={selectedTeamSlug}
                 projectId={selectedProjectId}

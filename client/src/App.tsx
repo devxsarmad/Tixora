@@ -39,6 +39,7 @@ export function App() {
 
     try {
       const nextSession = await action();
+      console.log('Authenticated successfully:', nextSession);
       await queryClient.cancelQueries();
       queryClient.clear();
       saveSession(nextSession);

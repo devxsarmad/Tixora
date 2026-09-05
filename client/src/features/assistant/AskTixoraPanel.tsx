@@ -1,5 +1,5 @@
 import { Bot } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   askTixora,
@@ -8,18 +8,10 @@ import {
   type AskTixoraToolResult,
   type PendingAssistantAction
 } from './api.js';
-
-type AskMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  sources?: AskTixoraSource[];
-  toolResults?: AskTixoraToolResult[];
-  pendingActions?: PendingAssistantAction[];
-  tone?: 'normal' | 'error';
-};
+import { chatHistoryKey, chatHistoryStore, type AskMessage } from './chatHistory.js';
 
 type AskTixoraPanelProps = {
+  userId: string;
   token: string;
   orgSlug: string | null;
   projectId: string | null;
@@ -112,10 +104,14 @@ function updateActionArgument(action: PendingAssistantAction, argumentKey: strin
   };
 }
 
-export function AskTixoraPanel({ token, orgSlug, projectId, onOpenTask }: AskTixoraPanelProps) {
+export function AskTixoraPanel({ userId, token, orgSlug, projectId, onOpenTask }: AskTixoraPanelProps) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState<AskMessage[]>([]);
+  const historyKey = chatHistoryKey(userId, orgSlug, projectId);
+  const messages = useSyncExternalStore(chatHistoryStore.subscribe, () => chatHistoryStore.read(historyKey));
+  function setMessages(updater: (current: AskMessage[]) => AskMessage[]) {
+    chatHistoryStore.update(historyKey, updater);
+  }
   const [isAsking, setIsAsking] = useState(false);
   const [confirmingActionId, setConfirmingActionId] = useState<string | null>(null);
 
