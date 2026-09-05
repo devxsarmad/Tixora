@@ -162,7 +162,8 @@ export function Workspace({ session, onLogout, onSessionChange }: WorkspaceProps
     selectedTeamSlug,
     includeArchivedProjects
   );
-  const projects = projectsQuery.data?.projects ?? [];
+  const hasResolvedProjects = !selectedTeamSlug || Boolean(projectsQuery.data) || !projectsQuery.isFetching;
+  const projects = hasResolvedProjects ? (projectsQuery.data?.projects ?? []) : [];
   const selectedProjectId = selectedTeamSlug ?
     (projects.find((project) => project.id === requestedProjectId)?.id ?? projects[0]?.id ?? null) : null;
   const projectQuery = useProject(selectedProjectId);
@@ -187,7 +188,22 @@ export function Workspace({ session, onLogout, onSessionChange }: WorkspaceProps
     ...(selectedProjectId ? [projectQuery] : []),
     ...(selectedProjectId && needsTasks ? [tasksQuery] : [])];
   const failedQuery = requiredQueries.find((query) => query.isError && query.data === undefined);
-  const isLoading = !failedQuery && requiredQueries.some((query) => query.data === undefined);
+  const isResolvingProjectSelection = Boolean(selectedTeamSlug) && projectsQuery.isFetching && !selectedProjectId;
+  const isResolvingSelectedProject =
+    Boolean(selectedProjectId) && projectQuery.data === undefined;
+  const isResolvingTasks =
+    needsTasks && Boolean(selectedProjectId) &&
+    (tasksQuery.data === undefined || (
+      tasksQuery.isFetching &&
+      tasks.length === 0 &&
+      (projects.find((project) => project.id === selectedProjectId)?.taskCount ?? 0) > 0
+    ));
+  const isLoading = !failedQuery && (
+    requiredQueries.some((query) => query.data === undefined) ||
+    isResolvingProjectSelection ||
+    isResolvingSelectedProject ||
+    isResolvingTasks
+  );
 
 
   const createOrganizationMutation = useCreateOrganization();
@@ -292,8 +308,8 @@ export function Workspace({ session, onLogout, onSessionChange }: WorkspaceProps
     [projectDetail?.members]
   );
   const setupStep = !selectedTeamSlug ? 1 : setupStage === 'members' ? 2 : 3;
-  const shouldShowSetupFlow = isOrganizationFormOpen || !selectedTeamSlug ||
-    (!selectedProject && canManageOrganization && activeView === 'board');
+  const shouldShowSetupFlow = !isLoading && (isOrganizationFormOpen || !selectedTeamSlug ||
+    (!selectedProject && canManageOrganization && activeView === 'board'));
   const hasTaskFilters = Object.values(taskQueryFilters).some(Boolean) || Boolean(taskFilters.search.trim());
   const visibleTasks = useMemo(
     () => getFilteredTasks(tasks),
