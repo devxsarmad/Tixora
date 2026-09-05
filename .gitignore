@@ -12,7 +12,7 @@ server/.env
 client/node_modules
 client/dist
 client/.env
-
+tests
 .DS_Store
 
 # Playwright
